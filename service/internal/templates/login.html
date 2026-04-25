@@ -1,6 +1,6 @@
 {{template "layout.html" .}}
 
-{{define "title"}}Sign in — StoryCloud{{end}}
+{{define "title"}}Sign in — AIFStudio{{end}}
 
 {{define "bodyclass"}}auth-page{{end}}
 
@@ -8,7 +8,7 @@
 <div class="auth-container">
   <div class="auth-box">
     <div class="auth-system-header">
-      <div class="auth-sys-line">STORYCLOUD MULTI-USER SYSTEM V2.6</div>
+      <div class="auth-sys-line">AIFSTUDIO MULTI-USER SYSTEM V2.6</div>
       <div class="auth-sys-line auth-sys-dim">(C) 1986 DIGITAL EQUIPMENT CORPORATION</div>
       <div class="auth-sys-line auth-sys-dim">ALL CONNECTIONS LOGGED AND MONITORED</div>
       <div class="auth-sys-divider">&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;</div>
@@ -162,13 +162,7 @@ body.auth-page .footer { display: none; }
 {{end}}
 
 {{define "scripts"}}
-<script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-
+<script>
 var form     = document.getElementById('loginForm');
 var emailEl  = document.getElementById('email');
 var passEl   = document.getElementById('password');
@@ -177,82 +171,45 @@ var errorEl  = document.getElementById('error');
 
 function nextParam() {
   var next = new URLSearchParams(location.search).get('next') || '';
-  // Guard against open-redirect: only allow same-origin relative paths.
   return (next.startsWith('/') && !next.startsWith('//')) ? next : '/';
 }
 
-function showError(msg, isInfo) {
-  errorEl.textContent = msg;
-  errorEl.style.color  = isInfo ? 'var(--cyan)' : '';
+function showError(msg) {
+  errorEl.textContent   = msg;
   errorEl.style.display = '';
 }
 
 function hideError() { errorEl.style.display = 'none'; }
 
-function mapError(code) {
-  switch (code) {
-    case 'auth/invalid-credential':
-    case 'auth/wrong-password':
-    case 'auth/user-not-found':
-      return 'Invalid email or password.';
-    case 'auth/too-many-requests':
-      return 'Too many attempts. Please try again later.';
-    case 'auth/network-request-failed':
-      return 'Network error. Check your connection.';
-    case 'auth/invalid-email':
-      return 'Please enter a valid email address.';
-    default:
-      return 'Sign-in failed. Please try again.';
+form.addEventListener('submit', async function () {
+  hideError();
+  var email    = emailEl.value.trim();
+  var password = passEl.value;
+  if (!email || !password) {
+    showError('Please enter your email and password.');
+    return;
   }
-}
 
-async function init() {
-  var resp, cfg;
+  submitEl.disabled    = true;
+  submitEl.textContent = 'Signing in…';
+
   try {
-    resp = await fetch('/api/config');
-    cfg  = await resp.json();
-  } catch (_) {
-    showError('Network error. Check your connection.');
-    return;
-  }
-
-  if (!resp.ok || cfg.error === 'auth_disabled') {
-    // Local development mode — auto-redirect without Firebase.
-    submitEl.disabled = true;
-    showError('Local development mode — signing in automatically…', true);
-    setTimeout(function () { location.assign(nextParam()); }, 800);
-    return;
-  }
-
-  var app  = initializeApp(cfg.firebase);
-  var auth = getAuth(app);
-
-  form.addEventListener('submit', async function () {
-    hideError();
-    var email    = emailEl.value.trim();
-    var password = passEl.value;
-    if (!email || !password) {
-      showError('Please enter your email and password.');
-      return;
+    var resp = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      credentials: 'same-origin',
+      body: JSON.stringify({email: email, password: password})
+    });
+    if (!resp.ok) {
+      var data = await resp.json().catch(function () { return {}; });
+      throw new Error(data.message || 'Invalid email or password.');
     }
-
-    submitEl.disabled    = true;
-    submitEl.textContent = 'Signing in…';
-
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      location.assign(nextParam());
-    } catch (err) {
-      submitEl.disabled    = false;
-      submitEl.textContent = '[ AUTHENTICATE ]';
-      showError(mapError(err.code));
-    }
-  });
-}
-
-init().catch(function (err) {
-  showError('Sign-in failed. Please try again.');
-  console.error(err);
+    location.assign(nextParam());
+  } catch (err) {
+    submitEl.disabled    = false;
+    submitEl.textContent = '[ AUTHENTICATE ]';
+    showError(err.message || 'Sign-in failed. Please try again.');
+  }
 });
 </script>
 {{end}}

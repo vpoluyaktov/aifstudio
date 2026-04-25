@@ -1,6 +1,6 @@
 {{template "layout.html" .}}
 
-{{define "title"}}Create account — StoryCloud{{end}}
+{{define "title"}}Create account — AIFStudio{{end}}
 
 {{define "bodyclass"}}auth-page{{end}}
 
@@ -8,7 +8,7 @@
 <div class="auth-container">
   <div class="auth-box">
     <div class="auth-system-header">
-      <div class="auth-sys-line">STORYCLOUD MULTI-USER SYSTEM V2.6</div>
+      <div class="auth-sys-line">AIFSTUDIO MULTI-USER SYSTEM V2.6</div>
       <div class="auth-sys-line auth-sys-dim">NEW USER REGISTRATION</div>
       <div class="auth-sys-divider">&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;</div>
     </div>
@@ -168,13 +168,7 @@ body.auth-page .footer { display: none; }
 {{end}}
 
 {{define "scripts"}}
-<script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import {
-  getAuth,
-  createUserWithEmailAndPassword,
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-
+<script>
 var form          = document.getElementById('registerForm');
 var emailEl       = document.getElementById('email');
 var passEl        = document.getElementById('password');
@@ -187,86 +181,52 @@ function nextParam() {
   return (next.startsWith('/') && !next.startsWith('//')) ? next : '/';
 }
 
-function showError(msg, isInfo) {
-  errorEl.textContent  = msg;
-  errorEl.style.color  = isInfo ? 'var(--cyan)' : '';
+function showError(msg) {
+  errorEl.textContent   = msg;
   errorEl.style.display = '';
 }
 
 function hideError() { errorEl.style.display = 'none'; }
 
-function mapError(code) {
-  switch (code) {
-    case 'auth/email-already-in-use':
-      return 'An account with this email already exists.';
-    case 'auth/weak-password':
-      return 'Password must be at least 6 characters.';
-    case 'auth/invalid-email':
-      return 'Please enter a valid email address.';
-    case 'auth/network-request-failed':
-      return 'Network error. Check your connection.';
-    default:
-      return 'Registration failed. Please try again.';
-  }
-}
+form.addEventListener('submit', async function () {
+  hideError();
+  var email    = emailEl.value.trim();
+  var password = passEl.value;
+  var confirm  = confirmPassEl.value;
 
-async function init() {
-  var resp, cfg;
+  if (!email || !password || !confirm) {
+    showError('Please fill in all fields.');
+    return;
+  }
+  if (password !== confirm) {
+    showError('Passwords do not match.');
+    return;
+  }
+  if (password.length < 6) {
+    showError('Password must be at least 6 characters.');
+    return;
+  }
+
+  submitEl.disabled    = true;
+  submitEl.textContent = 'Creating account…';
+
   try {
-    resp = await fetch('/api/config');
-    cfg  = await resp.json();
-  } catch (_) {
-    showError('Network error. Check your connection.');
-    return;
+    var resp = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      credentials: 'same-origin',
+      body: JSON.stringify({email: email, password: password, display_name: email})
+    });
+    if (!resp.ok) {
+      var data = await resp.json().catch(function () { return {}; });
+      throw new Error(data.message || 'Registration failed.');
+    }
+    location.assign(nextParam());
+  } catch (err) {
+    submitEl.disabled    = false;
+    submitEl.textContent = '[ CREATE ACCOUNT ]';
+    showError(err.message || 'Registration failed. Please try again.');
   }
-
-  if (!resp.ok || cfg.error === 'auth_disabled') {
-    submitEl.disabled = true;
-    showError('Local development mode — signing in automatically…', true);
-    setTimeout(function () { location.assign(nextParam()); }, 800);
-    return;
-  }
-
-  var app  = initializeApp(cfg.firebase);
-  var auth = getAuth(app);
-
-  form.addEventListener('submit', async function () {
-    hideError();
-    var email    = emailEl.value.trim();
-    var password = passEl.value;
-    var confirm  = confirmPassEl.value;
-
-    if (!email || !password || !confirm) {
-      showError('Please fill in all fields.');
-      return;
-    }
-    if (password !== confirm) {
-      showError('Passwords do not match.');
-      return;
-    }
-    if (password.length < 6) {
-      showError('Password must be at least 6 characters.');
-      return;
-    }
-
-    submitEl.disabled    = true;
-    submitEl.textContent = 'Creating account…';
-
-    try {
-      // Firebase auto signs-in on success.
-      await createUserWithEmailAndPassword(auth, email, password);
-      location.assign(nextParam());
-    } catch (err) {
-      submitEl.disabled    = false;
-      submitEl.textContent = '[ CREATE ACCOUNT ]';
-      showError(mapError(err.code));
-    }
-  });
-}
-
-init().catch(function (err) {
-  showError('Registration failed. Please try again.');
-  console.error(err);
 });
 </script>
 {{end}}

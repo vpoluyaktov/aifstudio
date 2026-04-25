@@ -1,87 +1,51 @@
 /**
- * StoryCloud — Firebase auth bootstrap (loaded as <script type="module"> on every page).
+ * AIFStudio — session-cookie auth bootstrap (loaded as <script type="module"> on every page).
  *
  * Responsibilities:
- *  - Skip on /login and /register (those pages initialise Firebase themselves).
- *  - Fetch /api/config and initialise the Firebase JS SDK.
- *  - On auth state confirmed (user present): populate window.scAuth and resolve
- *    window.scAuth.ready so that apiFetch() calls unblock.
- *  - On auth state absent: redirect to /login (ready never resolves — page navigates).
- *  - Local-dev mode (/api/config returns 503 auth_disabled): inject stub user so
- *    the app functions without Firebase credentials.
- *  - Populate the nav user area and wire the Sign-out button.
+ *  - Skip on /login and /register (those pages handle auth themselves).
+ *  - Call GET /api/auth/me to check session validity.
+ *  - On 200: populate window.scAuth, resolve scAuth.ready, populate nav.
+ *  - On 401: redirect to /login?next=<current path>.
+ *  - Cookies are sent automatically — no token management needed.
  */
 
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import {
-  getAuth,
-  onAuthStateChanged,
-  signOut as fbSignOut,
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-
-// Auth pages initialise Firebase themselves — nothing to do here.
+// Auth pages handle their own flow — nothing to do here.
 if (location.pathname !== '/login' && location.pathname !== '/register') {
   initAuth();
 }
 
 async function initAuth() {
-  let resp, cfg;
+  let resp, user;
   try {
-    resp = await fetch('/api/config');
-    cfg  = await resp.json();
+    resp = await fetch('/api/auth/me', { credentials: 'same-origin' });
   } catch (_) {
-    // Network failure on config fetch — fall back to local-dev stub so the UI
-    // does not completely break in offline development.
-    applyLocalDev();
+    location.assign('/login?next=' + encodeURIComponent(location.pathname + location.search));
     return;
   }
 
-  if (!resp.ok || cfg.error === 'auth_disabled') {
-    applyLocalDev();
+  if (resp.status === 401) {
+    location.assign('/login?next=' + encodeURIComponent(location.pathname + location.search));
     return;
   }
 
-  const app  = initializeApp(cfg.firebase);
-  const auth = getAuth(app);
+  if (!resp.ok) {
+    location.assign('/login?next=' + encodeURIComponent(location.pathname + location.search));
+    return;
+  }
 
-  // Install real implementations before onAuthStateChanged fires.
-  window.scAuth.getToken = async function () {
-    const user = auth.currentUser;
-    if (!user) {
-      location.assign('/login?next=' + encodeURIComponent(location.pathname + location.search));
-      return null;
-    }
-    // Never cache the result — SDK transparently refreshes when < 5 min remain.
-    return user.getIdToken(/* forceRefresh */ false);
-  };
+  user = await resp.json();
+  window.scAuth.currentUser = user;
+
+  // Cookies are sent automatically — no Bearer token needed.
+  window.scAuth.getToken = async function () { return null; };
 
   window.scAuth.signOut = async function () {
-    await fbSignOut(auth);
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
     location.assign('/login');
   };
 
-  onAuthStateChanged(auth, function (user) {
-    window.scAuth.currentUser = user;
-    if (!user) {
-      // Not authenticated — redirect and leave scAuth.ready pending so any
-      // in-flight apiFetch calls never fire their .then() callbacks.
-      location.assign(
-        '/login?next=' + encodeURIComponent(location.pathname + location.search),
-      );
-      return;
-    }
-    populateNavUser(user);
-    // Unblock all apiFetch calls that are awaiting scAuth.ready.
-    window.scAuth._resolveReady();
-  });
-}
-
-function applyLocalDev() {
-  window.scAuth.getToken    = async function () { return 'local-dev-stub'; };
-  window.scAuth.signOut     = function () { location.assign('/login'); };
-  window.scAuth.currentUser = { uid: 'local-dev', email: 'dev@local' };
   window.scAuth._resolveReady();
-  populateNavUser({ email: 'dev@local' });
+  populateNavUser(user);
 }
 
 function populateNavUser(user) {

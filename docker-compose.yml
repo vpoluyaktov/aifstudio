@@ -15,13 +15,14 @@
 
 services:
   aifstudio:
-    build:
-      context: ./service
-      dockerfile: Dockerfile
-    image: aifstudio:latest
+    image: vpoluyaktov/aifstudio:latest
+    # Uncomment to build locally instead of pulling from Docker Hub:
+    # build:
+    #   context: ./service
+    #   dockerfile: Dockerfile
     container_name: aifstudio
     ports:
-      - "8080:8080"
+      - "9901:8080"
     env_file: .env
     volumes:
       # SQLite DB file (and its WAL/SHM sidecars). The host `./data/db`

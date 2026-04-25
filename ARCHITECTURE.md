@@ -1798,9 +1798,95 @@ Loaded from env vars at startup. `config.Load()` returns `(*Config, error)`; par
 
 ## 11. Build and Operations
 
-### 11.1 Dockerfile (self-contained, multi-stage)
+### 11.0 Two-image build pattern (base + app)
 
-The Dockerfile is now self-contained — it does not pull from `gcr.io/dfh-ops-id/storycloud-base`. The runtime image is built from `debian:bookworm-slim` and the IF toolchain (frotz, glulxe, inform6, frob, Inform 7) is installed inside the build.
+The container image is split into **two** Dockerfiles to keep per-commit CI under two minutes:
+
+| Image | Source | Tag(s) on Docker Hub | Rebuild trigger |
+|-------|--------|----------------------|-----------------|
+| **Base** (toolchain) | `docker/base.Dockerfile` | `vpoluyaktov/aifstudio-base:latest`, `vpoluyaktov/aifstudio-base:frobtads-v2.0-inform7-10.1.2` | Manual (`workflow_dispatch`) or push to `main` that touches `docker/base.Dockerfile` / `docker/inform7-wrapper.sh` |
+| **App** (Go binary) | `service/Dockerfile` (FROM the base image) | `vpoluyaktov/aifstudio:latest`, `vpoluyaktov/aifstudio:<MAJOR.MINOR.commitcount>` | Every push to `main` and every `v*` tag |
+
+**Why split.** The base layer compiles `frob` (TADS interpreter) from source and downloads + extracts the Inform 7 .deb — together ~10–15 minutes. That toolchain changes rarely (only when the user bumps `FROBTADS_TAG` or `INFORM7_DEB_URL`); the Go binary changes on every commit. Building both in one Dockerfile would re-run the toolchain layer on every PR, blowing the CI budget. The split lets the per-commit pipeline finish in under two minutes by pulling the cached base image layer from Docker Hub.
+
+**Toolchain tag invariant.** The immutable tag in `docker/base.Dockerfile` (encoded as `frobtads-<TAG>-inform7-<VERSION>`) MUST match:
+
+1. The `FROBTADS_TAG` and `INFORM7_DEB_URL` ARGs in `docker/base.Dockerfile`.
+2. The tag list in `.github/workflows/base-image.yml`.
+3. The `FROM vpoluyaktov/aifstudio-base:<tag>` line in `service/Dockerfile`.
+
+When bumping the toolchain: update all three together in the same commit, then run `.github/workflows/base-image.yml` (manually or by touching one of the trigger paths) before the app workflow runs against `main`. The per-commit app build will fail with "manifest unknown" if the new tag has not been pushed.
+
+**Repository layout:**
+
+```
+docker/
+  base.Dockerfile          # Stage 2 (runtime): debian:bookworm-slim + IF toolchain
+  inform7-wrapper.sh       # /usr/local/bin/inform7 shim, baked into the base image
+service/
+  Dockerfile               # Stage 1: Go builder; Stage 2: FROM the base image + binary
+  ...                      # Go source
+.github/workflows/
+  base-image.yml           # Builds and pushes vpoluyaktov/aifstudio-base
+  main.yml                 # Lints, tests, builds, pushes vpoluyaktov/aifstudio
+```
+
+The build context for `docker/base.Dockerfile` is the `docker/` directory (so `COPY inform7-wrapper.sh` reads from `docker/inform7-wrapper.sh`). The build context for `service/Dockerfile` remains the `service/` directory (the Go module).
+
+### 11.1 Dockerfiles (two-image, multi-stage)
+
+The runtime image derives from `vpoluyaktov/aifstudio-base` on Docker Hub — it does not install the IF toolchain on every build. Per-commit CI only runs the Go-builder stage and copies the binary on top of the pre-baked base.
+
+**`docker/base.Dockerfile` (toolchain layer):**
+
+```dockerfile
+# syntax=docker/dockerfile:1.7
+FROM debian:bookworm-slim
+
+ARG FROBTADS_TAG=v2.0
+ARG INFORM7_DEB_URL="https://github.com/ganelson/inform/releases/download/v10.1.2/inform7-ide_2.0.0-1_amd64.deb"
+ARG INFORM7_DEB_SHA256="2a238e3d2da7b583334cc2cfa4fd88eda6d44b83d8ba8117c0664e0740b6ac40"
+
+RUN set -eux; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates tzdata curl wget tar xz-utils unzip bash \
+        frotz glulxe inform6-compiler inform6-library; \
+    # frobtads v2.0 uses CMake; v1.x ./bootstrap script is gone.
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        build-essential cmake pkg-config \
+        libcurl4-openssl-dev libncurses-dev git; \
+    git clone --branch "${FROBTADS_TAG}" --depth 1 \
+        https://github.com/realnc/frobtads.git /tmp/frobtads; \
+    cd /tmp/frobtads && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local . && make -j"$(nproc)" && make install; \
+    cd / && rm -rf /tmp/frobtads; \
+    wget -O /tmp/inform7.deb "${INFORM7_DEB_URL}"; \
+    echo "${INFORM7_DEB_SHA256}  /tmp/inform7.deb" | sha256sum -c; \
+    mkdir -p /tmp/inform7-extract /opt/inform7/bin /usr/local/share/inform7; \
+    dpkg-deb -x /tmp/inform7.deb /tmp/inform7-extract; \
+    cp /tmp/inform7-extract/usr/lib/x86_64-linux-gnu/inform7-ide/inform7 /opt/inform7/bin/inform7; \
+    cp /tmp/inform7-extract/usr/lib/x86_64-linux-gnu/inform7-ide/inform6 /opt/inform7/bin/inform6; \
+    cp -r /tmp/inform7-extract/usr/share/inform7-ide/. /usr/local/share/inform7/; \
+    rm -f "/usr/local/share/inform7/Extensions/Emily Short/Skeleton Keys.i7x"; \
+    rm -rf /tmp/inform7.deb /tmp/inform7-extract; \
+    apt-get purge -y --auto-remove \
+        build-essential cmake pkg-config \
+        libcurl4-openssl-dev libncurses-dev git; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        libcurl4 libncurses6 libtinfo6; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
+
+# Wrapper baked into the base — service/Dockerfile does NOT re-COPY it.
+COPY inform7-wrapper.sh /usr/local/bin/inform7
+RUN chmod +x /usr/local/bin/inform7
+
+# Sanity check + non-root user + /app/data dirs (see source for full text).
+RUN groupadd -r app && useradd -r -g app -M -d /nonexistent -s /usr/sbin/nologin app
+RUN mkdir -p /app/data/db /app/data/storage && chown -R app:app /app/data
+```
+
+**`service/Dockerfile` (per-commit, fast):**
 
 ```dockerfile
 # syntax=docker/dockerfile:1.7
@@ -1812,44 +1898,14 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-# modernc.org/sqlite is pure Go — CGO_ENABLED=0 is correct.
 RUN CGO_ENABLED=0 GOOS=linux go build \
       -trimpath \
       -ldflags="-s -w" \
       -o /out/aifstudio .
 
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────
-FROM debian:bookworm-slim
+FROM vpoluyaktov/aifstudio-base:frobtads-v2.0-inform7-10.1.2
 
-# IF toolchain via apt + utilities + frob built from source, all in one
-# RUN layer so build deps are purged in the same step.
-RUN set -eux; \
-    apt-get update; \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        ca-certificates tzdata curl wget tar xz-utils unzip bash \
-        frotz glulxe inform6-compiler inform6-library; \
-    apt-get install -y --no-install-recommends \
-        build-essential autoconf automake libtool pkg-config \
-        libcurses-ocaml-dev libncurses-dev git; \
-    git clone --branch v2.0 https://github.com/realnc/frobtads.git /tmp/frobtads; \
-    cd /tmp/frobtads && ./bootstrap && ./configure && make -j"$(nproc)" && make install; \
-    cd / && rm -rf /tmp/frobtads; \
-    # Inform 7 CLI bundle — version pinned via build args.
-    # (Install commands or shim — see PROGRESS.md for the canonical install steps.)
-    apt-get purge -y --auto-remove \
-        build-essential autoconf automake libtool pkg-config \
-        libcurses-ocaml-dev libncurses-dev git; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/*
-
-# Non-root runtime user.
-RUN groupadd -r app && useradd -r -g app -M -d /nonexistent -s /usr/sbin/nologin app
-
-# Pre-create the volume mount points so the image works even if the operator
-# forgets to bind-mount the host directories.
-RUN mkdir -p /app/data/db /app/data/storage && chown -R app:app /app/data
-
-# App binary.
 COPY --from=gobuilder /out/aifstudio /usr/local/bin/aifstudio
 
 USER app
@@ -1866,7 +1922,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 ENTRYPOINT ["/usr/local/bin/aifstudio"]
 ```
 
-`PATH` includes `/usr/games` because Debian installs `frotz`, `dfrotz`, and `glulxe` there. `frob` goes to `/usr/local/bin/frob`.
+`PATH` includes `/usr/games` because Debian installs `frotz`, `dfrotz`, and `glulxe` there. `frob` goes to `/usr/local/bin/frob`. The `app` user, `/app/data` directories, and the `/usr/local/bin/inform7` wrapper are inherited from the base image and MUST NOT be redeclared in `service/Dockerfile`.
 
 **Runtime filesystem:**
 - `/tmp` — ephemeral per-session story/save files at `/tmp/runs/<runId>/`; Inform 7 build sandboxes at `/tmp/build/<buildId>/`.
@@ -1883,7 +1939,14 @@ ENTRYPOINT ["/usr/local/bin/aifstudio"]
 
 ### 11.2 CI/CD — GitHub Actions (lint, test, build, publish to Docker Hub)
 
-File: `.github/workflows/main.yml`. There is no Terraform, no GCP, no GKE, no smoke test against a live URL — image publication to Docker Hub is the entire delivery surface. Operators pull `vpoluyaktov/aifstudio:<version>` from Docker Hub and run `docker compose up -d` on the target host (the Compose file references `image: aifstudio:latest` for local builds; production deployments swap the `build:` block for `image: vpoluyaktov/aifstudio:<version>`).
+There are **two** workflow files, in line with the two-image pattern (§11.0):
+
+| Workflow | File | Trigger | Output |
+|----------|------|---------|--------|
+| **App** | `.github/workflows/main.yml` | every push and PR (lint+test); push to `main` and `v*` tags also push the image | `vpoluyaktov/aifstudio:<MAJOR.MINOR.commitcount>` and `:latest` |
+| **Base image** | `.github/workflows/base-image.yml` | `workflow_dispatch` (manual) or push to `main` that touches `docker/base.Dockerfile` / `docker/inform7-wrapper.sh` | `vpoluyaktov/aifstudio-base:frobtads-v2.0-inform7-10.1.2` and `:latest` |
+
+There is no Terraform, no GCP, no GKE, no smoke test against a live URL — image publication to Docker Hub is the entire delivery surface. Operators pull `vpoluyaktov/aifstudio:<version>` from Docker Hub and run `docker compose up -d` on the target host (the Compose file references `image: aifstudio:latest` for local builds; production deployments swap the `build:` block for `image: vpoluyaktov/aifstudio:<version>`).
 
 **Pipeline stages (in order):**
 

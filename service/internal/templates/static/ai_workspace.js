@@ -22,6 +22,7 @@
   var wsChatHistory, wsChatInput, wsSendBtn, chatEmpty;
   var saveBtn, buildBtn, playBtn, testBtn, publishBtn, publishPill, backBtn, deleteBtn;
   var editToggle;
+  var sourceCollapseBtn, wsSourcePanel;
   var wsTestPanel, wsTestOutput, wsTestResult;
   var historyBtn, wsHistoryBackdrop, wsHistoryDrawer, wsHistoryCloseBtn;
   var wsHistoryListEl, wsHistoryLoadingEl, wsHistoryPreviewEl;
@@ -51,7 +52,9 @@
     publishBtn      = document.getElementById('publishBtn');
     publishPill     = document.getElementById('publishPill');
     backBtn         = document.getElementById('backBtn');
-    editToggle      = document.getElementById('editToggle');
+    editToggle          = document.getElementById('editToggle');
+    sourceCollapseBtn   = document.getElementById('sourceCollapseBtn');
+    wsSourcePanel       = document.querySelector('.ws-source-panel');
     wsBuildLog      = document.getElementById('wsBuildLog');
     deleteBtn       = document.getElementById('deleteBtn');
     testBtn         = document.getElementById('testBtn');
@@ -87,6 +90,15 @@
     editToggle.addEventListener('change', function () {
       wsSourceEditor.readOnly = !this.checked;
     });
+
+    sourceCollapseBtn.addEventListener('click', toggleSourcePanel);
+
+    // On mobile, start with source panel collapsed so chat is visible first.
+    if (window.matchMedia('(max-width: 700px)').matches) {
+      wsSourcePanel.classList.add('collapsed');
+      sourceCollapseBtn.textContent = '▸';
+      sourceCollapseBtn.setAttribute('aria-expanded', 'false');
+    }
 
     // Cmd/Ctrl+Enter sends message
     wsChatInput.addEventListener('keydown', function (e) {
@@ -997,6 +1009,14 @@
       wsError.style.display = '';
       wsError.innerHTML = '<div class="error-msg">' + escHtml(msg) + '</div>';
     }
+  }
+
+  // ── Source panel collapse (mobile) ───────────────────────────────────────────
+
+  function toggleSourcePanel() {
+    var collapsed = wsSourcePanel.classList.toggle('collapsed');
+    sourceCollapseBtn.textContent = collapsed ? '▸' : '▾';
+    sourceCollapseBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
   }
 
   // ── History panel ─────────────────────────────────────────────────────────────

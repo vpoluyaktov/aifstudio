@@ -406,18 +406,46 @@ body.workspace-page > .footer { display: none; }
 .ws-test-result.fail         { color: #f85149; }
 .ws-test-result.error-result { color: var(--orange); }
 
+/* ── Source panel collapse toggle ── */
+.ws-source-collapse-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.82rem;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  line-height: 1;
+  transition: color 0.15s;
+  display: none; /* hidden on desktop */
+}
+.ws-source-collapse-btn:hover { color: var(--text); }
+
 /* ── Mobile (≤700 px) ── */
 @media (max-width: 700px) {
   body.workspace-page { height: 100dvh; }
+  .ws-source-collapse-btn { display: inline-flex; align-items: center; }
   .ws-panels {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(240px, 40vh) 1fr;
+    grid-template-rows: auto 1fr;
     overflow-y: hidden;
   }
   .ws-source-panel {
     border-right: none;
     border-bottom: 1px solid var(--border);
     overflow: hidden;
+    /* default: expanded at 40vh */
+    max-height: 40vh;
+    transition: max-height 0.22s ease;
+  }
+  .ws-source-panel.collapsed {
+    /* shrink to just the header (~32px) */
+    max-height: 2.2rem;
+    overflow: hidden;
+  }
+  .ws-source-panel.collapsed .ws-source-editor,
+  .ws-source-panel.collapsed .ws-source-hint {
+    display: none;
   }
   .ws-toolbar-title { max-width: 140px; font-size: 0.85rem; }
 }
@@ -665,6 +693,7 @@ body.workspace-page > .footer { display: none; }
       <!-- Left: Source -->
       <div class="ws-source-panel">
         <div class="ws-panel-header">
+          <button id="sourceCollapseBtn" class="ws-source-collapse-btn" title="Toggle source panel" aria-expanded="true">▾</button>
           <span>Inform 7 Source</span>
           <div class="ws-panel-right">
             <label class="edit-toggle-label">

@@ -211,8 +211,10 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
+      object-position: top left;
       position: absolute;
       inset: 0;
+      border: none;
     }
     .screenshot-caption { padding: 0.5rem 0; }
     .screenshot-caption h3 {
@@ -456,9 +458,7 @@
 
     <div class="screenshot-row">
       <div class="screenshot-placeholder">
-        <div class="ph-icon">◈</div>
-        <div>SCREENSHOT PLACEHOLDER</div>
-        <div style="font-size:13px; letter-spacing:1px;">IFDB CATALOGUE VIEW</div>
+        <img src="img/screenshot-catalogue.png" alt="IFDB Game Catalogue — search results showing Zork titles with cover art">
       </div>
       <div class="screenshot-caption">
         <h3>IFDB Catalogue</h3>
@@ -468,13 +468,31 @@
 
     <div class="screenshot-row reverse">
       <div class="screenshot-placeholder">
-        <div class="ph-icon">▶</div>
-        <div>SCREENSHOT PLACEHOLDER</div>
-        <div style="font-size:13px; letter-spacing:1px;">GAME PLAY VIEW</div>
+        <img src="img/screenshot-game-detail.png" alt="Zork I game detail page with cover art and Play Game button">
+      </div>
+      <div class="screenshot-caption">
+        <h3>Game Detail</h3>
+        <p>Cover art, author info, rating, and a direct Play button. No setup, no downloads — the interpreter runs server-side.</p>
+      </div>
+    </div>
+
+    <div class="screenshot-row">
+      <div class="screenshot-placeholder">
+        <img src="img/screenshot-play.png" alt="Playing Zork I in the browser — terminal interface showing game output">
       </div>
       <div class="screenshot-caption">
         <h3>Play in the Browser</h3>
         <p>A faithful terminal-style interface for the classic IF experience. Full keyboard control, save/restore, and transcript download.</p>
+      </div>
+    </div>
+
+    <div class="screenshot-row reverse">
+      <div class="screenshot-placeholder">
+        <img src="img/screenshot-history.png" alt="My Games history page showing Zork I session with Continue button">
+      </div>
+      <div class="screenshot-caption">
+        <h3>Game History</h3>
+        <p>Every session is saved. Pick up exactly where you left off — continue, restart, or delete any game from your history.</p>
       </div>
     </div>
 
@@ -487,18 +505,6 @@
       <div class="screenshot-caption">
         <h3>AI Authoring Workspace</h3>
         <p>Write Inform 7 source with AI assistance. Compile and play your story without leaving the browser.</p>
-      </div>
-    </div>
-
-    <div class="screenshot-row reverse">
-      <div class="screenshot-placeholder">
-        <div class="ph-icon">◉</div>
-        <div>SCREENSHOT PLACEHOLDER</div>
-        <div style="font-size:13px; letter-spacing:1px;">MY GAMES / HISTORY</div>
-      </div>
-      <div class="screenshot-caption">
-        <h3>Game History</h3>
-        <p>Every session is saved. Pick up exactly where you left off — continue, restart, or delete any game from your history.</p>
       </div>
     </div>
 

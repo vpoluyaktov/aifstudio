@@ -1,0 +1,290 @@
+{{template "layout.html" .}}
+
+{{define "title"}}My Games — StoryCloud{{end}}
+
+{{define "content"}}
+<div class="main">
+
+  <div class="history-header">
+    <h1 class="history-title">MY GAMES</h1>
+  </div>
+
+  <div id="historyLoading" class="loading-area">
+    <span class="spinner"></span> Loading your games…
+  </div>
+
+  <div id="historyError" style="display:none"></div>
+
+  <div id="historyEmpty" class="empty-state" style="display:none">
+    <div class="icon">[--]</div>
+    No games yet. <a href="/">Browse the catalog</a> to start playing.
+  </div>
+
+  <div id="historyList" class="history-list" style="display:none"></div>
+
+</div>
+{{end}}
+
+{{define "head"}}
+<style>
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.75rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.history-title {
+  font-family: var(--pixel-mono);
+  font-size: 28px;
+  color: var(--crt-blue);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin: 0;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.history-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: rgba(4,17,11,0.85);
+  border: 1px solid var(--crt-border);
+  box-shadow: 0 0 16px rgba(120,255,175,0.06), inset 0 0 30px rgba(0,0,0,0.4);
+  border-radius: 4px;
+  padding: 1rem 1.25rem;
+  transition: border-color 0.15s;
+}
+.history-card:hover { border-color: var(--crt-fg); }
+
+.history-card-icon {
+  font-family: var(--pixel-mono);
+  font-size: 20px;
+  color: var(--crt-dim);
+  flex-shrink: 0;
+  width: 48px;
+  text-align: center;
+}
+
+.history-card-info {
+  flex: 1;
+  min-width: 0;
+}
+.history-card-title {
+  font-family: var(--pixel-mono);
+  font-size: 18px;
+  color: var(--crt-fg);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.3rem;
+}
+.history-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  font-family: var(--pixel-mono);
+  font-size: 15px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+}
+
+/* Status badges — bracket style */
+.status-badge {
+  font-family: var(--pixel-mono);
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.status-badge-running   { color: var(--crt-fg); animation: crt-blink 1s step-end infinite; }
+.status-badge-playing   { color: var(--crt-fg); animation: crt-blink 1s step-end infinite; }
+.status-badge-suspended { color: var(--crt-amber); }
+.status-badge-finished  { color: var(--crt-dim); opacity: 0.7; }
+
+.history-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 580px) {
+  .history-card { flex-wrap: wrap; }
+  .history-card-actions { width: 100%; justify-content: flex-start; }
+}
+</style>
+{{end}}
+
+{{define "scripts"}}
+<script>
+(function() {
+  var loadingEl = document.getElementById('historyLoading');
+  var errorEl   = document.getElementById('historyError');
+  var emptyEl   = document.getElementById('historyEmpty');
+  var listEl    = document.getElementById('historyList');
+
+  apiFetch('/api/runs/by-user?limit=50')
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d, status: r.status }; }); })
+    .then(function(res) {
+      loadingEl.style.display = 'none';
+      if (!res.ok) {
+        errorEl.innerHTML = '<div class="error-msg">' + escHtml((res.data && res.data.error) || 'Failed to load games') + '</div>';
+        errorEl.style.display = '';
+        return;
+      }
+      var runs = Array.isArray(res.data) ? res.data : res.data.runs;
+      if (!runs || runs.length === 0) {
+        emptyEl.style.display = '';
+        return;
+      }
+      listEl.style.display = '';
+      runs.forEach(function(run) {
+        listEl.appendChild(buildCard(run));
+      });
+    })
+    .catch(function(err) {
+      loadingEl.style.display = 'none';
+      errorEl.innerHTML = '<div class="error-msg">Failed to load games: ' + escHtml(err.message) + '</div>';
+      errorEl.style.display = '';
+    });
+
+  function buildCard(run) {
+    var card = document.createElement('div');
+    card.className = 'history-card';
+    card.id = 'card-' + run.id;
+
+    var sd = statusDisplay(run);
+    var badgeCls = 'status-badge ' + sd.cls;
+
+    var canContinue = (run.status === 'running' || run.status === 'suspended');
+    var canRestart  = (run.canRestart !== false);
+    var canDelete   = (run.canDelete  !== false);
+
+    var metaHtml = '<span class="' + badgeCls + '">' + escHtml(sd.label) + '</span>';
+    if (run.format) metaHtml += '<span>' + escHtml(run.format) + '</span>';
+    if (run.turnCount) metaHtml += '<span>' + run.turnCount + ' turn' + (run.turnCount !== 1 ? 's' : '') + '</span>';
+    if (run.lastActiveAt) metaHtml += '<span>' + relativeTime(run.lastActiveAt) + '</span>';
+
+    var actionsHtml = '';
+    if (canContinue) {
+      actionsHtml += '<a class="btn btn-primary btn-sm" href="/play/' + escHtml(run.id) + '">&gt; Continue</a>';
+    }
+    if (canRestart) {
+      actionsHtml += '<button class="btn btn-secondary btn-sm btn-restart" data-id="' + escHtml(run.id) + '">[RST]</button>';
+    }
+    if (canDelete) {
+      actionsHtml += '<button class="btn btn-danger btn-sm btn-delete" data-id="' + escHtml(run.id) + '">[DEL]</button>';
+    }
+
+    card.innerHTML =
+      '<div class="history-card-icon">[&gt;]</div>'
+      + '<div class="history-card-info">'
+      +   '<div class="history-card-title">' + escHtml(run.title || run.id) + '</div>'
+      +   '<div class="history-card-meta">' + metaHtml + '</div>'
+      + '</div>'
+      + '<div class="history-card-actions">' + actionsHtml + '</div>';
+
+    // Restart
+    var restartBtn = card.querySelector('.btn-restart');
+    restartBtn.addEventListener('click', function() {
+      var id = this.getAttribute('data-id');
+      restartBtn.disabled = true;
+      restartBtn.textContent = '…';
+      apiFetch('/api/runs/' + encodeURIComponent(id) + '/restart', { method: 'POST' })
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+        .then(function(res) {
+          if (!res.ok) {
+            restartBtn.disabled = false;
+            restartBtn.textContent = '[RST]';
+            alert('Restart failed: ' + ((res.data && res.data.error) || 'unknown error'));
+            return;
+          }
+          window.location.href = '/play/' + res.data.id;
+        })
+        .catch(function(err) {
+          restartBtn.disabled = false;
+          restartBtn.textContent = '[RST]';
+          alert('Restart failed: ' + err.message);
+        });
+    });
+
+    // Delete
+    var deleteBtn = card.querySelector('.btn-delete');
+    deleteBtn.addEventListener('click', function() {
+      var id = this.getAttribute('data-id');
+      if (!confirm('Delete this game? This cannot be undone.')) return;
+      deleteBtn.disabled = true;
+      apiFetch('/api/runs/' + encodeURIComponent(id), { method: 'DELETE' })
+        .then(function(r) {
+          if (r.ok || r.status === 204) {
+            var el = document.getElementById('card-' + id);
+            if (el) el.remove();
+            // Show empty state if no cards remain
+            if (listEl.children.length === 0) {
+              listEl.style.display = 'none';
+              emptyEl.style.display = '';
+            }
+          } else {
+            deleteBtn.disabled = false;
+            return r.json().then(function(d) { alert('Delete failed: ' + (d.error || 'unknown error')); });
+          }
+        })
+        .catch(function(err) {
+          deleteBtn.disabled = false;
+          alert('Delete failed: ' + err.message);
+        });
+    });
+
+    return card;
+  }
+
+  // Returns {label, cls} for the status badge.
+  // "suspended" sessions active within the last 2 hours show as "Playing" —
+  // in the POST+wait model the interpreter suspends between every turn, so a
+  // recently-active session is one the user is actively playing right now.
+  function statusDisplay(run) {
+    if (run.status === 'suspended' && run.lastActiveAt) {
+      var elapsed = Date.now() - new Date(run.lastActiveAt).getTime();
+      if (elapsed < 2 * 60 * 60 * 1000) {
+        return { label: '[PLAYING]', cls: 'status-badge-playing' };
+      }
+    }
+    if (run.status === 'running')   return { label: '[RUNNING]',   cls: 'status-badge-running'   };
+    if (run.status === 'suspended') return { label: '[PAUSED]',    cls: 'status-badge-suspended' };
+    if (run.status === 'finished')  return { label: '[FINISHED]',  cls: 'status-badge-finished'  };
+    return { label: '[' + run.status.toUpperCase() + ']', cls: 'status-badge-finished' };
+  }
+
+  function relativeTime(isoStr) {
+    var then = new Date(isoStr).getTime();
+    var diff = Date.now() - then;
+    var sec  = Math.floor(diff / 1000);
+    if (sec < 60)   return 'just now';
+    var min = Math.floor(sec / 60);
+    if (min < 60)   return min + ' minute' + (min !== 1 ? 's' : '') + ' ago';
+    var hr = Math.floor(min / 60);
+    if (hr < 24)    return hr + ' hour' + (hr !== 1 ? 's' : '') + ' ago';
+    var days = Math.floor(hr / 24);
+    if (days < 30)  return days + ' day' + (days !== 1 ? 's' : '') + ' ago';
+    var months = Math.floor(days / 30);
+    if (months < 12) return months + ' month' + (months !== 1 ? 's' : '') + ' ago';
+    var years = Math.floor(months / 12);
+    return years + ' year' + (years !== 1 ? 's' : '') + ' ago';
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+})();
+</script>
+{{end}}

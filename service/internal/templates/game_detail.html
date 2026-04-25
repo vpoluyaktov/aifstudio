@@ -1,0 +1,364 @@
+{{template "layout.html" .}}
+
+{{define "title"}}Game Detail — StoryCloud{{end}}
+
+{{define "content"}}
+<div class="main" id="pageRoot" data-ifdb-id="{{.IfdbId}}">
+
+  <a href="/" class="back-link">&lt; BACK TO SEARCH</a>
+
+  <div id="loadingState" class="loading-area">
+    <span class="spinner"></span> Loading game…
+  </div>
+
+  <div id="errorState" style="display:none"></div>
+
+  <div id="gameContent" style="display:none">
+
+    <div class="game-header" id="gameHeader"></div>
+
+    <div class="game-body">
+      <div id="gameDesc" class="game-desc"></div>
+
+      <div class="game-actions" id="gameActions"></div>
+
+      <div class="downloads-section" id="downloadsSection" style="display:none">
+        <h3 class="section-title">DOWNLOAD LINKS</h3>
+        <ul class="download-list" id="downloadList"></ul>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+{{end}}
+
+{{define "head"}}
+<style>
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--crt-dim);
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 1.5rem;
+  transition: color 0.15s;
+}
+.back-link:hover { color: var(--crt-fg); text-decoration: none; }
+
+.game-header {
+  display: flex;
+  gap: 1.75rem;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+}
+.game-cover {
+  width: 160px;
+  height: 160px;
+  border-radius: 2px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(120,255,175,0.04);
+  border: 1px solid var(--crt-border);
+}
+.game-cover-placeholder {
+  width: 160px;
+  height: 160px;
+  border-radius: 2px;
+  background: rgba(120,255,175,0.04);
+  border: 1px solid var(--crt-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--pixel-mono);
+  font-size: 2.5rem;
+  color: var(--crt-dim);
+  flex-shrink: 0;
+}
+.game-meta-block { flex: 1; min-width: 0; }
+.game-title {
+  font-family: var(--pixel-mono);
+  font-size: clamp(22px, 4vw, 32px);
+  color: var(--crt-blue);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  line-height: 1.2;
+  margin-bottom: 0.5rem;
+}
+.game-authors {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+}
+.game-year-rating {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+}
+.game-rating { color: var(--crt-amber); font-size: 16px; }
+.game-formats { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.fmt-badge {
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  background: rgba(120,255,175,0.08);
+  color: var(--crt-dim);
+  border: 1px solid var(--crt-border);
+  border-radius: 2px;
+  padding: 0.1rem 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.status-badge {
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.status-badge-commercial {
+  color: var(--crt-red);
+  border: 1px solid rgba(255,85,85,0.4);
+  background: rgba(255,85,85,0.08);
+  padding: 0.1rem 0.5rem;
+  border-radius: 2px;
+}
+.commercial-notice {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  color: var(--crt-red);
+  border-left: 3px solid var(--crt-red);
+  background: rgba(255,85,85,0.06);
+  padding: 0.5rem 0.75rem;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.game-desc {
+  background: rgba(4,17,11,0.85);
+  border: 1px solid var(--crt-border);
+  box-shadow: 0 0 16px rgba(120,255,175,0.06), inset 0 0 30px rgba(0,0,0,0.4);
+  border-radius: 4px;
+  padding: 1.25rem 1.5rem;
+  color: var(--crt-fg);
+  font-family: var(--pixel-mono);
+  font-size: 17px;
+  line-height: 1.6;
+  margin-bottom: 1.5rem;
+  white-space: pre-wrap;
+  text-transform: none;
+}
+
+.game-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.section-title {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--crt-blue);
+  margin-bottom: 0.75rem;
+}
+
+.download-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.download-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(4,17,11,0.85);
+  border: 1px solid var(--crt-border);
+  border-radius: 2px;
+  padding: 0.6rem 1rem;
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+}
+.download-fmt {
+  color: var(--crt-fg);
+  text-transform: uppercase;
+  min-width: 60px;
+}
+.download-url { color: var(--crt-dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; }
+.download-size { color: var(--crt-dim); flex-shrink: 0; }
+
+/* Play button loading state */
+.btn-play.loading { opacity: 0.5; pointer-events: none; }
+
+@media (max-width: 600px) {
+  .game-cover, .game-cover-placeholder { width: 90px; height: 90px; }
+  .game-title { font-size: 20px; }
+  .game-header { gap: 1rem; }
+}
+</style>
+{{end}}
+
+{{define "scripts"}}
+<script>
+(function() {
+  var root   = document.getElementById('pageRoot');
+  var ifdbId = root.getAttribute('data-ifdb-id');
+
+  var loading  = document.getElementById('loadingState');
+  var errEl    = document.getElementById('errorState');
+  var content  = document.getElementById('gameContent');
+
+  apiFetch('/api/ifdb/games/' + encodeURIComponent(ifdbId))
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d, status: r.status }; }); })
+    .then(function(res) {
+      loading.style.display = 'none';
+      if (!res.ok) {
+        errEl.innerHTML = '<div class="error-msg">' + escHtml(res.data.error || 'Game not found') + '</div>';
+        errEl.style.display = '';
+        return;
+      }
+      renderGame(res.data);
+      content.style.display = '';
+    })
+    .catch(function(err) {
+      loading.style.display = 'none';
+      errEl.innerHTML = '<div class="error-msg">Failed to load game: ' + escHtml(err.message) + '</div>';
+      errEl.style.display = '';
+    });
+
+  function renderGame(g) {
+    // Header
+    var headerEl = document.getElementById('gameHeader');
+    var coverHtml = g.coverArtURL
+      ? '<img class="game-cover" src="' + escHtml(g.coverArtURL) + '" alt="Cover" onerror="this.parentNode.innerHTML=\'<div class=game-cover-placeholder>[?]</div>\'">'
+      : '<div class="game-cover-placeholder">[?]</div>';
+
+    var starsHtml = '';
+    if (g.rating) {
+      var filled = Math.round(g.rating);
+      var empty  = Math.max(0, 5 - filled);
+      starsHtml = '<span class="game-rating">['
+        + '*'.repeat(filled)
+        + '-'.repeat(empty)
+        + '] ' + g.rating.toFixed(1) + '</span>';
+    }
+
+    var isCommercial = !g.downloadLinks || g.downloadLinks.length === 0;
+
+    var formatsHtml = '';
+    if (g.formats && g.formats.length) {
+      formatsHtml = '<div class="game-formats">'
+        + g.formats.map(function(f) { return '<span class="fmt-badge">' + escHtml(f) + '</span>'; }).join('')
+        + (isCommercial ? ' <span class="status-badge status-badge-commercial">[COMMERCIAL]</span>' : '')
+        + '</div>';
+    } else if (isCommercial) {
+      formatsHtml = '<div class="game-formats"><span class="status-badge status-badge-commercial">[COMMERCIAL]</span></div>';
+    }
+
+    headerEl.innerHTML = coverHtml
+      + '<div class="game-meta-block">'
+      + '<div class="game-title">' + escHtml(g.title) + '</div>'
+      + (g.authors && g.authors.length ? '<div class="game-authors">BY ' + escHtml(g.authors.join(', ')) + '</div>' : '')
+      + '<div class="game-year-rating">'
+      + (g.year ? '<span>' + g.year + '</span>' : '')
+      + starsHtml
+      + '</div>'
+      + formatsHtml
+      + '</div>';
+
+    // Description
+    if (g.description) {
+      document.getElementById('gameDesc').textContent = g.description;
+    } else {
+      document.getElementById('gameDesc').style.display = 'none';
+    }
+
+    // Actions
+    var actionsEl = document.getElementById('gameActions');
+    if (isCommercial) {
+      var notice = document.createElement('p');
+      notice.className = 'commercial-notice';
+      notice.textContent = 'This game is not available for download due to licensing reasons.';
+      actionsEl.appendChild(notice);
+    } else {
+      var playBtn = document.createElement('button');
+      playBtn.className = 'btn btn-play';
+      playBtn.textContent = '[ PLAY GAME ]';
+      playBtn.onclick = function() { startPlay(g, playBtn); };
+      actionsEl.appendChild(playBtn);
+    }
+
+    // Downloads
+    if (g.downloadLinks && g.downloadLinks.length) {
+      var dlSection = document.getElementById('downloadsSection');
+      dlSection.style.display = '';
+      var dlList = document.getElementById('downloadList');
+      g.downloadLinks.forEach(function(dl) {
+        var li = document.createElement('li');
+        li.className = 'download-item';
+        var sizeStr = dl.size ? formatBytes(dl.size) : '';
+        li.innerHTML = '<span class="download-fmt">' + escHtml(dl.format) + '</span>'
+          + '<span class="download-url">' + escHtml(dl.url) + '</span>'
+          + (sizeStr ? '<span class="download-size">' + sizeStr + '</span>' : '');
+        dlList.appendChild(li);
+      });
+    }
+  }
+
+  function startPlay(g, btn) {
+    btn.classList.add('loading');
+    btn.textContent = '[ STARTING... ]';
+
+    var body = { sourceType: 'ifdb', ifdbId: g.id };
+    if (g.formats && g.formats.length) body.format = g.formats[0];
+
+    apiFetch('/api/runs', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+      .then(function(res) {
+        if (!res.ok) {
+          btn.classList.remove('loading');
+          btn.textContent = '[ PLAY GAME ]';
+          var errEl = document.getElementById('errorState');
+          errEl.innerHTML = '<div class="error-msg">Could not start game: ' + escHtml(res.data.error || 'unknown error') + '</div>';
+          errEl.style.display = '';
+          return;
+        }
+        window.location.href = '/play/' + res.data.id;
+      })
+      .catch(function(err) {
+        btn.classList.remove('loading');
+        btn.textContent = '[ PLAY GAME ]';
+        var errEl = document.getElementById('errorState');
+        errEl.innerHTML = '<div class="error-msg">Failed to start: ' + escHtml(err.message) + '</div>';
+        errEl.style.display = '';
+      });
+  }
+
+  function formatBytes(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+    return (b/1048576).toFixed(1) + ' MB';
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+})();
+</script>
+{{end}}

@@ -1,0 +1,954 @@
+{{template "layout.html" .}}
+
+{{define "title"}}Playing — StoryCloud{{end}}
+
+{{define "bodyclass"}}play-page{{end}}
+
+{{define "content"}}
+<div class="terminal-container" id="termContainer" data-run-id="{{.RunId}}">
+
+  <!-- Status bar -->
+  <div class="term-statusbar" id="statusBar">
+    <span class="crt-terminal-name-top">DEC VT100</span>
+    <span id="statusText" class="status-connecting">LOADING</span>
+    <span style="margin-left:auto; display:flex; align-items:center; gap:0.75rem;">
+      <span id="savedIndicator" class="saved-indicator" style="display:none">✓ Saved</span>
+      <button id="sttToggle" class="term-icon-btn" title="Toggle voice input">STT: OFF</button>
+      <button id="ttsToggle" class="term-icon-btn" title="Toggle text-to-speech">🔇</button>
+      <a href="/" class="term-exit-link">✕ Exit</a>
+    </span>
+  </div>
+
+  <!-- Unsavable warning banner (hidden by default) -->
+  <div id="unsavableBanner" class="unsavable-banner" style="display:none">
+    ⚠ This game does not support saves — your progress cannot be restored if you leave.
+  </div>
+
+  <!-- Output scrollback -->
+  <div class="term-output" id="termOutput"></div>
+
+  <!-- Floppy drive indicator bar -->
+  <div class="crt-floppy-bar">
+    <span class="crt-floppy-group crt-floppy-left">
+      <span class="crt-floppy-unit">
+        <span class="crt-floppy-led led-carrier" id="ledCarrier"></span>
+        <span class="crt-floppy-label">CARRIER</span>
+      </span>
+      <span class="crt-floppy-unit">
+        <span class="crt-floppy-led led-dtr" id="ledDtr"></span>
+        <span class="crt-floppy-label">DTR</span>
+      </span>
+    </span>
+    <span class="crt-floppy-group crt-floppy-right">
+      <span class="crt-floppy-unit">
+        <span class="crt-floppy-led led-rx" id="ledRx"></span>
+        <span class="crt-floppy-label">RX</span>
+      </span>
+      <span class="crt-floppy-unit">
+        <span class="crt-floppy-led led-tx" id="ledTx"></span>
+        <span class="crt-floppy-label">TX</span>
+      </span>
+    </span>
+  </div>
+
+  <!-- Input row -->
+  <div class="term-input-row" id="inputRow">
+    <span class="term-prompt">&gt;</span><span id="cursorBlock" class="crt-cursor">█</span>
+    <input
+      type="text"
+      id="termInput"
+      class="term-input"
+      placeholder="Type a command and press Enter…"
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="none"
+      spellcheck="false"
+      disabled
+    >
+    <button id="micBtn" class="term-icon-btn term-mic-btn" title="Voice input (Chrome/Edge only)">🎤</button>
+  </div>
+
+</div>
+{{end}}
+
+{{define "head"}}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<script>
+/* visualViewport.height shrinks when the iOS keyboard appears (window.innerHeight
+   does not). visualViewport.offsetTop reports how far Safari has scrolled the
+   layout viewport upward to expose the focused input — the fixed container must
+   shift down by the same amount or a gap appears at the top.
+   The scroll listener is re-added specifically to track offsetTop changes;
+   the resize listener handles keyboard show/hide. */
+(function() {
+  function fitViewport() {
+    var vv = window.visualViewport;
+    if (vv) {
+      document.documentElement.style.setProperty('--vh', vv.height + 'px');
+      document.documentElement.style.setProperty('--vt', vv.offsetTop + 'px');
+    } else {
+      document.documentElement.style.setProperty('--vh', window.innerHeight + 'px');
+      document.documentElement.style.setProperty('--vt', '0px');
+    }
+    // Keep the last transcript line visible after the container reflows.
+    // termOutput may be null on the very first call (head runs before body).
+    var out = document.getElementById('termOutput');
+    if (out) out.scrollTop = out.scrollHeight;
+  }
+  fitViewport();
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', fitViewport);
+    window.visualViewport.addEventListener('scroll', fitViewport);
+  } else {
+    window.addEventListener('resize', fitViewport);
+  }
+})();
+</script>
+<style>
+:root {
+  --crt-bg:     #04110b;
+  --crt-fg:     #a9ffbf;
+  --crt-dim:    #6fe69a;
+  --crt-border: rgba(120,255,175,0.18);
+  --crt-glow:   0 0 10px rgba(60,255,140,0.14), 0 0 2px rgba(60,255,140,0.22);
+  --pixel-mono: "VT323", ui-monospace, "Courier New", monospace;
+}
+
+/* Override layout for full-height terminal */
+body.play-page {
+  overflow: hidden;
+  background: #010805;
+}
+/* Hide normal nav/footer on play page */
+body.play-page > .nav,
+body.play-page > .footer {
+  display: none;
+}
+
+.terminal-container {
+  position: fixed;
+  top: var(--vt, 1vh);
+  left: 2.5%;
+  right: 2.5%;
+  height: calc(var(--vh, 100dvh) - 2vh);
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(ellipse 120% 80% at 50% 30%, #082818 0%, var(--crt-bg) 55%, #020805 100%);
+  color: var(--crt-fg);
+  font-family: var(--pixel-mono);
+  overflow: hidden;
+  pointer-events: auto;
+  border: 1px solid rgba(120,255,175,0.35);
+  border-radius: 12px;
+  box-shadow:
+    0 0 40px rgba(0,255,140,0.08),
+    0 24px 60px rgba(0,0,0,0.7);
+}
+
+/* Status bar */
+.term-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 1rem;
+  background: #0a1f10;
+  border-bottom: 1px solid rgba(120,255,175,0.12);
+  font-family: var(--pixel-mono);
+  font-size: 17px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+.crt-terminal-name-top {
+  font-family: var(--pixel-mono);
+  font-size: 17px;
+  color: #a8d4ff;
+  letter-spacing: 1.5px;
+  text-shadow: 0 0 6px rgba(168,212,255,0.4);
+  user-select: none;
+  flex-shrink: 0;
+}
+.status-finished   { color: rgba(230,237,243,0.5); }
+.status-error      { color: #f85149; }
+.term-exit-link {
+  color: rgba(120,255,175,0.4);
+  text-decoration: none;
+  font-family: var(--pixel-mono);
+  font-size: 17px;
+  transition: color 0.2s;
+}
+.term-exit-link:hover { color: #f85149; text-decoration: none; }
+
+/* Unsavable banner */
+.unsavable-banner {
+  background: rgba(255,179,0,0.12);
+  border-bottom: 1px solid rgba(255,179,0,0.35);
+  color: #ffb347;
+  font-size: 0.82rem;
+  padding: 0.4rem 1rem;
+  flex-shrink: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Saved indicator */
+.saved-indicator {
+  color: #00ff88;
+  font-size: 0.78rem;
+  opacity: 1;
+  transition: opacity 1s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Output area */
+.term-output {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.25rem;
+  scroll-behavior: smooth;
+  /* Thin scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,255,136,0.2) transparent;
+  font-family: var(--pixel-mono);
+  font-size: 20px;
+  line-height: 1.15;
+  letter-spacing: 0.3px;
+  -webkit-font-smoothing: none;
+  text-transform: uppercase;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0.00) 0px,
+      rgba(0,0,0,0.00) 2px,
+      rgba(0,0,0,0.13) 3px
+    ),
+    transparent;
+}
+.term-output::-webkit-scrollbar { width: 6px; }
+.term-output::-webkit-scrollbar-track { background: transparent; }
+.term-output::-webkit-scrollbar-thumb { background: rgba(0,255,136,0.2); border-radius: 3px; }
+
+/* Output lines */
+.out-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.15;
+  margin: 0;
+  color: var(--crt-fg);
+  text-shadow: var(--crt-glow);
+  text-transform: uppercase;
+}
+.out-line-input {
+  color: #60ffee;
+  opacity: 0.9;
+  text-shadow: 0 0 8px rgba(60,240,220,0.3);
+}
+.out-line-status { color: #ffb347; text-shadow: 0 0 8px rgba(255,179,71,0.3); font-style: normal; }
+.out-line-error  { color: #f85149; text-shadow: 0 0 8px rgba(248,81,73,0.3);  font-style: normal; }
+.out-line-system { color: var(--crt-dim); text-shadow: none; font-style: normal; }
+.out-line-meta   { color: #c8ffd8; text-shadow: var(--crt-glow); }
+
+/* Input row */
+.term-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  border-top: 1px solid var(--crt-border);
+  background: rgba(4,17,11,0.95);
+  flex-shrink: 0;
+  font-family: var(--pixel-mono);
+  font-size: 20px;
+}
+.term-prompt {
+  color: var(--crt-fg);
+  font-weight: 400;
+  font-size: 20px;
+  user-select: none;
+  text-shadow: var(--crt-glow);
+}
+.term-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--crt-fg);
+  font-family: var(--pixel-mono);
+  font-size: 20px;
+  caret-color: var(--crt-fg);
+  padding: 0;
+  text-shadow: var(--crt-glow);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.term-input::placeholder { color: var(--crt-dim); font-style: normal; opacity: 0.5; text-transform: uppercase; }
+.term-input:disabled { opacity: 0.5; }
+input[type="text"].term-input,
+input[type="text"].term-input:focus {
+  border: none;
+  outline: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  background: transparent;
+  width: auto;
+}
+
+/* Voice / TTS icon buttons */
+.term-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--pixel-mono);
+  font-size: 17px;
+  line-height: 1;
+  padding: 0.2rem 0.1rem;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+.term-icon-btn:hover { opacity: 1; }
+.term-icon-btn.active { opacity: 1; }
+
+/* Mic pulsing animation when listening */
+@keyframes mic-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+.term-mic-btn.listening {
+  opacity: 1;
+  animation: mic-pulse 0.9s ease-in-out infinite;
+}
+
+/* Blinking cursor block */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+.crt-cursor {
+  color: var(--crt-fg);
+  text-shadow: var(--crt-glow);
+  font-family: var(--pixel-mono);
+  font-size: 20px;
+  line-height: 1;
+  animation: blink 1s step-start infinite;
+  user-select: none;
+}
+
+/* Blinking status indicators */
+@keyframes crt-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}
+.status-running    { color: #00ff88; animation: crt-pulse 1.2s ease-in-out infinite; }
+.status-connecting { color: #ffb347; animation: crt-pulse 0.7s ease-in-out infinite; }
+
+/* Floppy drive indicator bar */
+.crt-floppy-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.3rem 1.25rem;
+  background: rgba(2,10,6,0.9);
+  border-top: 1px solid rgba(120,255,175,0.12);
+  border-bottom: 1px solid rgba(120,255,175,0.12);
+  flex-shrink: 0;
+}
+.crt-floppy-unit {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.crt-floppy-group {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+}
+.crt-floppy-label {
+  font-family: var(--pixel-mono);
+  font-size: 13px;
+  color: rgba(168,212,255,0.65);
+  letter-spacing: 0.5px;
+  user-select: none;
+}
+/* LED base — amber off state */
+.crt-floppy-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2e1a00;
+  box-shadow: none;
+  flex-shrink: 0;
+  transition: background 0.05s, box-shadow 0.05s;
+}
+/* LED on state — applied via JS */
+.crt-floppy-led.led-on {
+  background: #ff8c00;
+  box-shadow: 0 0 6px rgba(255,140,0,0.9), 0 0 2px #ff8c00;
+}
+/* CARRIER and DTR stay solid once game starts */
+.led-carrier.led-on,
+.led-dtr.led-on {
+  background: #ff8c00;
+  box-shadow: 0 0 6px rgba(255,140,0,0.9), 0 0 2px #ff8c00;
+}
+</style>
+{{end}}
+
+{{define "scripts"}}
+<script>
+(function() {
+  var container       = document.getElementById('termContainer');
+  var runId           = container.getAttribute('data-run-id');
+  var output          = document.getElementById('termOutput');
+  var input           = document.getElementById('termInput');
+  var statusEl        = document.getElementById('statusText');
+  var unsavableBanner = document.getElementById('unsavableBanner');
+
+  var cmdHistory = [];
+  var histIdx    = -1;
+  var gameOver   = false;  // set true when session ends — no more commands accepted
+
+  // ── Serial indicator LEDs ────────────────────────────────────────────────────
+  var ledCarrier = document.getElementById('ledCarrier');
+  var ledDtr     = document.getElementById('ledDtr');
+  var ledRx      = document.getElementById('ledRx');
+  var ledTx      = document.getElementById('ledTx');
+  var rxTimer    = null;
+
+  function ledOn(el)  { if (el) el.classList.add('led-on'); }
+  function ledOff(el) { if (el) el.classList.remove('led-on'); }
+
+  // RX blinks at 120ms intervals while data is arriving; call startRx() when
+  // typewriter output begins, stopRx() when it finishes.
+  function startRx() {
+    if (rxTimer) return;
+    ledOn(ledRx);
+    rxTimer = setInterval(function() {
+      if (ledRx) ledRx.classList.toggle('led-on');
+    }, 120);
+  }
+  function stopRx() {
+    clearInterval(rxTimer);
+    rxTimer = null;
+    ledOff(ledRx);
+  }
+
+  // TX flashes once for 200ms when a command is sent.
+  function flashTx() {
+    ledOn(ledTx);
+    setTimeout(function() { ledOff(ledTx); }, 200);
+  }
+
+  // ── Typewriter output queue ──────────────────────────────────────────────────
+  var twQueue   = [];   // [{text, cls}, ...]
+  var twRunning = false;
+  var twOnDone  = null; // called when queue drains
+  var TW_DELAY  = 18;   // ms per character (~650 baud equivalent)
+
+  function appendLine(text, cls) {
+    var isGameOutput = (cls === '' || cls === undefined || cls === 'out-line-meta');
+    if (!isGameOutput) {
+      // Instant render for system/error/input lines
+      var div = document.createElement('div');
+      div.className = 'out-line ' + (cls || '');
+      div.textContent = text;
+      output.appendChild(div);
+      scrollToBottom();
+      return;
+    }
+    // Queue for typewriter reveal
+    twQueue.push({ text: text, cls: cls || '' });
+    if (!twRunning) runTypewriterQueue();
+  }
+
+  function runTypewriterQueue() {
+    if (twQueue.length === 0) {
+      twRunning = false;
+      stopRx();
+      if (twOnDone) { var cb = twOnDone; twOnDone = null; cb(); }
+      return;
+    }
+    twRunning = true;
+    startRx();
+    var item = twQueue.shift();
+    var div  = document.createElement('div');
+    div.className = 'out-line ' + item.cls;
+    div.textContent = '';
+    output.appendChild(div);
+
+    var i = 0;
+    var text = item.text;
+    if (text.length === 0) {
+      // Empty line — just a blank row, no delay needed
+      scrollToBottom();
+      setTimeout(runTypewriterQueue, TW_DELAY);
+      return;
+    }
+    function typeNext() {
+      if (i < text.length) {
+        div.textContent += text[i++];
+        scrollToBottom();
+        setTimeout(typeNext, TW_DELAY);
+      } else {
+        runTypewriterQueue();
+      }
+    }
+    typeNext();
+  }
+
+  // ── Audio unlock (iOS Safari) ─────────────────────────────────────────────────
+  // iOS Safari only allows speechSynthesis.speak() from a synchronous user gesture.
+  // Calling it from a fetch callback is silently blocked. Workaround: on the first
+  // tap/click, fire a zero-volume utterance to unlock the engine while inside a
+  // gesture. After this runs once, async calls work for the rest of the session.
+  var audioUnlocked = false;
+  function unlockAudio() {
+    if (audioUnlocked || !window.speechSynthesis) return;
+    audioUnlocked = true;
+    var u = new SpeechSynthesisUtterance('');
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+    document.removeEventListener('click',    unlockAudio);
+    document.removeEventListener('touchend', unlockAudio);
+  }
+  document.addEventListener('click',    unlockAudio, { once: true });
+  document.addEventListener('touchend', unlockAudio, { once: true });
+
+  // ── TTS (SpeechSynthesis) ────────────────────────────────────────────────────
+
+  var ttsToggleBtn = document.getElementById('ttsToggle');
+  var ttsEnabled   = localStorage.getItem('sc_tts_enabled') === '1';
+  // Pre-load voices; Chrome populates them asynchronously
+  var voices = [];
+  if (window.speechSynthesis) {
+    voices = speechSynthesis.getVoices();
+    speechSynthesis.onvoiceschanged = function() {
+      voices = speechSynthesis.getVoices();
+    };
+  }
+
+  function updateTtsBtn() {
+    ttsToggleBtn.textContent = ttsEnabled ? '🔊' : '🔇';
+    ttsToggleBtn.title       = ttsEnabled ? 'TTS on — click to disable' : 'TTS off — click to enable';
+    ttsToggleBtn.classList.toggle('active', ttsEnabled);
+  }
+
+  ttsToggleBtn.addEventListener('click', function() {
+    ttsEnabled = !ttsEnabled;
+    localStorage.setItem('sc_tts_enabled', ttsEnabled ? '1' : '0');
+    if (!ttsEnabled && window.speechSynthesis) speechSynthesis.cancel();
+    updateTtsBtn();
+  });
+
+  updateTtsBtn();
+
+  // onDone (optional) is called after the utterance ends, or immediately
+  // when TTS is disabled (so callers can chain mic auto-restart uniformly).
+  // Guaranteed to fire exactly once via a once-flag across onend/onerror/catch/timeout.
+  function speakText(text, onDone) {
+    if (!ttsEnabled || !window.speechSynthesis) {
+      if (onDone) onDone();
+      return;
+    }
+    speechSynthesis.cancel();
+    // Strip bare ">" prompt lines before speaking
+    var cleaned = text.split('\n')
+      .filter(function(l) { return l.trim() !== '>'; })
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!cleaned) {
+      if (onDone) onDone();
+      return;
+    }
+    var utt = new SpeechSynthesisUtterance(cleaned);
+    // Only assign a voice if voices are loaded — passing null/unknown can cause rejection
+    if (voices.length) {
+      utt.voice = voices.find(function(v) { return v.lang.startsWith('en'); }) || voices[0];
+    }
+    if (onDone) {
+      var fired = false;
+      var callDone = function() { if (!fired) { fired = true; onDone(); } };
+      utt.onend   = callDone;
+      utt.onerror = callDone;
+      // Safety net: some browsers never fire onend/onerror (autoplay policy, etc.)
+      var wordCount = cleaned.split(/\s+/).length;
+      setTimeout(callDone, Math.max(3000, wordCount * 450));
+      try {
+        speechSynthesis.speak(utt);
+      } catch (e) {
+        callDone();
+      }
+    } else {
+      try { speechSynthesis.speak(utt); } catch (e) {}
+    }
+  }
+
+  function cancelSpeech() {
+    if (window.speechSynthesis) speechSynthesis.cancel();
+  }
+
+  // ── STT (SpeechRecognition) ───────────────────────────────────────────────────
+
+  var SpeechRec    = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var micBtn       = document.getElementById('micBtn');
+  var sttToggleBtn = document.getElementById('sttToggle');
+  var recognition  = null;
+  var micActive    = false;
+  // Default STT on when supported, off otherwise
+  var sttEnabled   = SpeechRec
+    ? (localStorage.getItem('sc_stt_enabled') !== '0')
+    : false;
+
+  function updateSttBtn() {
+    sttToggleBtn.textContent = sttEnabled ? 'STT: ON' : 'STT: OFF';
+    sttToggleBtn.classList.toggle('active', sttEnabled);
+    sttToggleBtn.title = sttEnabled ? 'Voice input on — click to disable' : 'Voice input off — click to enable';
+    sttToggleBtn.style.opacity = sttEnabled ? '1' : '';
+    micBtn.style.display = sttEnabled ? '' : 'none';
+  }
+
+  if (!SpeechRec) {
+    // Browser doesn't support STT (Firefox, Safari) — hide both controls
+    sttToggleBtn.style.display = 'none';
+    micBtn.style.display = 'none';
+  } else {
+    recognition = new SpeechRec();
+    recognition.continuous     = false;
+    recognition.interimResults = false;
+    recognition.lang           = 'en-US';
+
+    recognition.onresult = function(e) {
+      var transcript = e.results[0][0].transcript;
+      if (transcript.trim().length < 2) {
+        // Noise or single-char hit — discard and restart listening
+        input.value = '';
+        startMic();
+        return;
+      }
+      input.value = transcript;
+      stopMic();
+      // Auto-submit the recognised command
+      handleEnter();
+    };
+
+    recognition.onerror = function() { stopMic(); };
+    recognition.onend   = function() { stopMic(); };
+
+    micBtn.addEventListener('click', function() {
+      if (micActive) { stopMic(); } else { startMic(); }
+    });
+
+    sttToggleBtn.addEventListener('click', function() {
+      sttEnabled = !sttEnabled;
+      localStorage.setItem('sc_stt_enabled', sttEnabled ? '1' : '0');
+      if (!sttEnabled) stopMic();
+      updateSttBtn();
+    });
+
+    updateSttBtn();
+  }
+
+  function startMic() {
+    if (!recognition || !sttEnabled || input.disabled || gameOver) return;
+    micActive = true;
+    micBtn.classList.add('listening');
+    micBtn.title = 'Listening… tap to cancel';
+    try { recognition.start(); } catch (e) { stopMic(); }
+  }
+
+  function stopMic() {
+    micActive = false;
+    if (micBtn) {
+      micBtn.classList.remove('listening');
+      micBtn.title = 'Voice input (Chrome/Edge only)';
+    }
+    try { if (recognition) recognition.stop(); } catch (e) {}
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  // Click anywhere in the terminal to refocus the input.
+  output.addEventListener('click', function() {
+    if (!input.disabled) input.focus();
+  });
+
+  function enableInput() {
+    input.disabled = false;
+    input.focus();
+    setStatus('CONNECTED', 'status-running');
+  }
+
+  function disableInput() {
+    input.disabled = true;
+  }
+
+  function setStatus(text, cls) {
+    statusEl.textContent = text;
+    statusEl.className = cls || '';
+  }
+
+  function scrollToBottom() {
+    output.scrollTop = output.scrollHeight;
+  }
+
+  function showUnsavableBanner() {
+    unsavableBanner.style.display = '';
+  }
+
+  function showTransientError(msg) {
+    appendLine('\u26a0 ' + msg, 'out-line-error');
+  }
+
+  function showGameFinished(data) {
+    gameOver = true;
+    disableInput();
+    setStatus('SESSION ENDED', 'status-finished');
+    appendLine('', 'out-line-system');
+    appendLine('\u2500\u2500 Session finished \u2500\u2500', 'out-line-system');
+    if (data && data.transcriptURL) {
+      appendLine('\ud83d\udcc4 Transcript: ' + data.transcriptURL, 'out-line-system');
+    }
+  }
+
+  // ── Command history navigation ────────────────────────────────────────────────
+
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (histIdx < cmdHistory.length - 1) {
+        histIdx++;
+        input.value = cmdHistory[cmdHistory.length - 1 - histIdx];
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (histIdx > 0) {
+        histIdx--;
+        input.value = cmdHistory[cmdHistory.length - 1 - histIdx];
+      } else {
+        histIdx = -1;
+        input.value = '';
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      handleEnter();
+    }
+  });
+
+  function handleEnter() {
+    if (input.disabled || gameOver) return;
+    var text = input.value;
+    input.value = '';
+    histIdx = -1;
+    if (!text.trim()) return;
+    cmdHistory.push(text);
+    sendCommand(text);
+  }
+
+  // ── Startup text splitter ────────────────────────────────────────────────────
+  // Splits Infocom/frotz startup output into a metadata header (title banner,
+  // copyright, release line) and the first room description.
+  // The split point is the last line matching the "Release N / Serial number N"
+  // pattern — everything up to and including that line is the header.
+  function splitStartupText(text) {
+    var lines = text.split('\n');
+    var splitIdx = -1;
+    for (var i = 0; i < lines.length; i++) {
+      if (/release\s+\d+\s*\/\s*serial\s+number\s+\d+/i.test(lines[i])) {
+        splitIdx = i;
+      }
+    }
+    if (splitIdx === -1) return { header: text, body: '' };
+    return {
+      header: lines.slice(0, splitIdx + 1).join('\n'),
+      body:   lines.slice(splitIdx + 1).join('\n').replace(/^\n+/, ''),
+    };
+  }
+
+  // ── /start — called once on page load ────────────────────────────────────────
+
+  function startGame() {
+    setStatus('LOADING', 'status-connecting');
+    apiFetch('/api/runs/' + encodeURIComponent(runId) + '/start')
+      .then(function(r) {
+        if (!r.ok) {
+          return r.json().catch(function() { return {}; }).then(function(data) {
+            throw new Error(data.message || ('HTTP ' + r.status));
+          });
+        }
+        return r.json();
+      })
+      .then(function(data) {
+        ledOn(ledCarrier);
+        ledOn(ledDtr);
+        // Replay panel: prior transcript shown in dimmed style.
+        if (data.replay) {
+          appendLine('── Previous session ────────────────────────────', 'out-line-system');
+          var lines = data.replay.split('\n');
+          for (var i = 0; i < lines.length; i++) {
+            appendLine(lines[i], 'out-line-system');
+          }
+          if (data.replayTruncated) {
+            appendLine('… (earlier output omitted) …', 'out-line-system');
+          }
+          appendLine('── Resuming ──────────────────────────────────────', 'out-line-system');
+        }
+        // Game output (startup text or restored position).
+        if (data.output) {
+          if (data.resumed) {
+            // Resume: output is just the current room — render green directly.
+            var resumeLines = data.output.split('\n');
+            for (var j = 0; j < resumeLines.length; j++) {
+              appendLine(resumeLines[j], '');
+            }
+          } else {
+            // Fresh start: split banner (white) from first room (green).
+            var parts = splitStartupText(data.output);
+            if (parts.header) {
+              var headerLines = parts.header.split('\n');
+              for (var k = 0; k < headerLines.length; k++) {
+                appendLine(headerLines[k], 'out-line-meta');
+              }
+            }
+            if (parts.body) {
+              appendLine(' ');  // visible blank separator
+              var bodyLines = parts.body.split('\n');
+              for (var m = 0; m < bodyLines.length; m++) {
+                appendLine(bodyLines[m], '');
+              }
+            }
+          }
+        }
+        if (data.unsavable) showUnsavableBanner();
+        if (data.state === 'finished') {
+          showGameFinished(data);
+        } else {
+          if (twRunning || twQueue.length > 0) {
+            twOnDone = enableInput;
+          } else {
+            enableInput();
+          }
+        }
+      })
+      .catch(function(err) {
+        setStatus('ERROR', 'status-error');
+        appendLine('⚠ Could not start game: ' + err.message, 'out-line-error');
+      });
+  }
+
+  // ── /command — called on each player input ────────────────────────────────────
+
+  function sendCommand(text) {
+    cancelSpeech();   // stop any in-progress TTS when a new command is sent
+    stopMic();        // stop STT if active
+    flashTx();
+    disableInput();
+    setStatus('CONNECTED', 'status-running');
+    // Echo the player's input in cyan.
+    appendLine('> ' + text, 'out-line-input');
+    postCommand(text, false);
+  }
+
+  // postCommand issues the fetch. On a 423 first attempt it waits 300ms and
+  // retries once; a second 423 surfaces an error to the player.
+  function postCommand(text, isRetry) {
+    apiFetch('/api/runs/' + encodeURIComponent(runId) + '/command', {
+      method: 'POST',
+      body: JSON.stringify({ input: text }),
+    })
+    .catch(function() { return null; })
+    .then(function(resp) {
+      if (!resp) {
+        showTransientError('Network error — check your connection.');
+        enableInput();
+        return;
+      }
+      if (resp.status === 423) {
+        if (isRetry) {
+          showTransientError('Game is busy, please try again.');
+          enableInput();
+        } else {
+          setTimeout(function() { postCommand(text, true); }, 300);
+        }
+        return;
+      }
+      return resp.json().catch(function() { return null; }).then(function(data) {
+        if (resp.status === 410) {
+          showGameFinished(data);
+          return;
+        }
+        if (resp.status === 409 && data && data.code === 'not_started') {
+          setStatus('RECONNECTING', 'status-connecting');
+          startGame();
+          return;
+        }
+        if (!resp.ok) {
+          showTransientError('Error ' + resp.status + (data && data.error ? ': ' + data.error : ''));
+          enableInput();
+          return;
+        }
+        if (data && data.output) {
+          var lines = data.output.split('\n');
+          for (var i = 0; i < lines.length; i++) {
+            appendLine(lines[i], '');
+          }
+          var sessionOver = data && data.state === 'finished';
+          // Always pass onDone; guard evaluated at callback fire-time (not definition-time)
+          // so toggling STT off mid-flight is respected.
+          // speakText calls onDone after utt.onend/onerror/timeout (TTS on)
+          // or immediately (TTS off) — mic restart works either way.
+          speakText(data.output, function() {
+            if (sttEnabled && !sessionOver) startMic();
+          });
+        }
+        if (data && data.unsavable) showUnsavableBanner();
+        if (data && data.state === 'finished') {
+          showGameFinished(data);
+        } else {
+          if (twRunning || twQueue.length > 0) {
+            twOnDone = enableInput;
+          } else {
+            enableInput();
+          }
+        }
+      });
+    });
+  }
+
+  // ── /suspend — fire-and-forget on page hide ───────────────────────────────────
+  // sendBeacon cannot set custom headers, so the Firebase ID token travels in
+  // the query string (?token=) for this one endpoint only (§22.5.4).
+  // The token is pre-fetched once and stored in a closure; it is valid for 1 h.
+
+  window.scAuth.ready
+    .then(function () { return window.scAuth.getToken(); })
+    .then(function (token) {
+      var base = '/api/runs/' + encodeURIComponent(runId) + '/suspend';
+      var suspendUrl = (token && token !== 'local-dev-stub')
+        ? base + '?token=' + encodeURIComponent(token)
+        : base;
+      document.addEventListener('pagehide', function () {
+        navigator.sendBeacon(suspendUrl);
+      });
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') navigator.sendBeacon(suspendUrl);
+      });
+    });
+
+  // ── Blink cursor — show only when input is focused ───────────────────────────
+
+  var cursorBlock = document.getElementById('cursorBlock');
+  if (cursorBlock) {
+    input.addEventListener('focus', function() { cursorBlock.style.display = ''; });
+    input.addEventListener('blur',  function() { cursorBlock.style.display = 'none'; });
+    // hide by default — show when input enabled
+    cursorBlock.style.display = 'none';
+  }
+
+  // ── Boot ─────────────────────────────────────────────────────────────────────
+
+  startGame();
+})();
+</script>
+{{end}}

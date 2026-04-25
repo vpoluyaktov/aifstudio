@@ -1,0 +1,158 @@
+{{template "layout.html" .}}
+
+{{define "title"}}Community — StoryCloud{{end}}
+
+{{define "content"}}
+<div class="main">
+
+  <div class="comm-header">
+    <div>
+      <h1 class="comm-title">COMMUNITY GAMES</h1>
+      <p class="comm-sub">Play interactive fiction written and published by the StoryCloud community.</p>
+    </div>
+    <a href="/create" class="btn btn-primary">[ CREATE YOUR OWN ]</a>
+  </div>
+
+  <div id="commLoading" class="loading-area">
+    <span class="spinner"></span> Loading games…
+  </div>
+
+  <div id="commError" style="display:none"></div>
+
+  <div id="commEmpty" class="empty-state" style="display:none">
+    <div class="icon">[ ]</div>
+    <div>No games published yet.</div>
+    <div style="margin-top:0.5rem;font-size:16px;">
+      <a href="/create">[ Create a project ]</a> and publish it to be the first!
+    </div>
+  </div>
+
+  <div id="commGrid" class="comm-grid" style="display:none"></div>
+
+</div>
+{{end}}
+
+{{define "head"}}
+<style>
+.comm-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+.comm-title {
+  font-family: var(--pixel-mono);
+  font-size: 28px;
+  color: var(--crt-blue);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin: 0 0 0.3rem;
+}
+.comm-sub {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+/* Game grid */
+.comm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+/* Game card */
+.game-card {
+  background: rgba(4,17,11,0.85);
+  border: 1px solid var(--crt-border);
+  box-shadow: 0 0 16px rgba(120,255,175,0.06), inset 0 0 30px rgba(0,0,0,0.4);
+  border-radius: 4px;
+  padding: 1.1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  transition: border-color 0.15s;
+}
+.game-card:hover { border-color: var(--crt-fg); }
+
+.game-card-title {
+  font-family: var(--pixel-mono);
+  font-size: 18px;
+  color: var(--crt-fg);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-card-desc {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  color: var(--crt-dim);
+  line-height: 1.4;
+  flex: 1;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  min-height: 3.8rem;
+}
+
+.game-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+.game-card-meta {
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.game-card-author {
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+}
+
+.btn-play-sm {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: rgba(120,255,175,0.08);
+  border: 1px solid var(--crt-fg);
+  color: var(--crt-fg);
+  border-radius: 2px;
+  padding: 0.3rem 1rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.btn-play-sm:hover { background: rgba(120,255,175,0.18); border-color: var(--crt-fg); }
+.btn-play-sm:disabled { opacity: 0.35; cursor: not-allowed; }
+
+@media (max-width: 600px) {
+  .comm-grid { grid-template-columns: 1fr; }
+  .comm-header { flex-direction: column; }
+}
+</style>
+{{end}}
+
+{{define "scripts"}}
+<script src="/static/community.js"></script>
+{{end}}

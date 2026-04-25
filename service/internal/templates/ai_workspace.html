@@ -1,0 +1,751 @@
+{{template "layout.html" .}}
+
+{{define "title"}}AI Workspace — StoryCloud{{end}}
+
+{{define "bodyclass"}}workspace-page{{end}}
+
+{{define "head"}}
+<style>
+/* Workspace fills the viewport below the nav */
+body.workspace-page {
+  height: 100vh;
+  overflow: hidden;
+}
+body.workspace-page > .footer { display: none; }
+
+/* Flex container for loading / main content */
+.ws-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Loading overlay */
+.ws-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+/* Main workspace (hidden until loaded) */
+.ws-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Toolbar ── */
+.ws-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 1rem;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.ws-toolbar-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+.ws-toolbar-group {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.btn-xs {
+  padding: 0.28rem 0.7rem;
+  font-size: 0.8rem;
+  border-radius: 6px;
+}
+
+/* ── Status bar ── */
+.ws-status {
+  padding: 0.18rem 1rem;
+  font-size: 0.76rem;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  flex-shrink: 0;
+  min-height: 22px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-status.info    { color: var(--cyan); }
+.ws-status.success { color: var(--green); }
+.ws-status.error   { color: #f85149; white-space: normal; text-overflow: clip; }
+.ws-status.warning { color: var(--orange); }
+
+/* ── Build log panel ── */
+.ws-build-log {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.ws-build-log details { padding: 0.35rem 1rem; }
+.ws-build-log summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: #f85149;
+  user-select: none;
+  list-style: none;
+  padding: 0.2rem 0;
+}
+.ws-build-log summary::-webkit-details-marker { display: none; }
+.ws-build-log pre {
+  margin: 0.4rem 0 0.2rem;
+  font-size: 0.72rem;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+/* ── Two-panel grid ── */
+.ws-panels {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 60% 40%;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Source panel (left) ── */
+.ws-source-panel {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  min-height: 0;
+}
+.ws-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  font-weight: 700;
+}
+.ws-panel-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.8rem;
+}
+.edit-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  user-select: none;
+}
+.edit-toggle-label input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+  width: auto;
+}
+.ws-source-editor {
+  flex: 1;
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  background: #0a0d14;
+  color: #e6edf3;
+  font-family: 'Courier New', Consolas, 'Liberation Mono', monospace;
+  font-size: 0.84rem;
+  line-height: 1.65;
+  resize: none;
+  padding: 0.85rem 1rem;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.ws-source-editor:focus { outline: none; box-shadow: none; }
+.ws-source-editor[readonly] { color: rgba(230,237,243,0.75); cursor: default; }
+.ws-source-hint {
+  padding: 0.28rem 1rem;
+  font-size: 0.73rem;
+  color: var(--muted);
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  min-height: 22px;
+}
+.ws-source-hint.streaming {
+  color: var(--cyan);
+  animation: ws-pulse 1.4s ease-in-out infinite;
+}
+@keyframes ws-pulse { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+
+/* ── Chat panel (right) ── */
+.ws-chat-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+.publish-pill {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.publish-pill.published   { background: rgba(63,185,80,0.18); color: var(--green); }
+.publish-pill.unpublished { background: var(--bg3); color: var(--muted); border: 1px solid var(--border); }
+
+.ws-chat-history {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.7rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.ws-chat-history::-webkit-scrollbar { width: 4px; }
+.ws-chat-history::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.chat-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 0.88rem;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  gap: 0.5rem;
+}
+.chat-empty .icon { font-size: 2.2rem; }
+
+.chat-turn { display: flex; flex-direction: column; gap: 0.3rem; }
+
+.chat-user-msg {
+  align-self: flex-end;
+  max-width: 88%;
+  background: rgba(167,139,250,0.14);
+  border: 1px solid rgba(167,139,250,0.22);
+  border-radius: 12px 12px 2px 12px;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.86rem;
+  word-break: break-word;
+  color: var(--text);
+}
+.chat-user-msg.system-msg {
+  align-self: center;
+  background: rgba(96,214,250,0.08);
+  border-color: rgba(96,214,250,0.15);
+  color: var(--muted);
+  font-style: italic;
+  font-size: 0.8rem;
+  border-radius: 20px;
+  padding: 0.3rem 0.75rem;
+  max-width: 100%;
+}
+
+.chat-ai-reply {
+  align-self: flex-start;
+  max-width: 88%;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 2px 12px 12px 12px;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.86rem;
+  word-break: break-word;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+.chat-ai-reply.streaming {
+  border-color: rgba(96,214,250,0.25);
+  background: rgba(96,214,250,0.04);
+}
+.chat-ai-reply.error-reply {
+  border-color: rgba(248,81,73,0.3);
+  background: rgba(248,81,73,0.06);
+  color: #f85149;
+}
+.no-fence-warning {
+  font-size: 0.82em;
+  color: #e67e22;
+  display: block;
+  margin-top: 4px;
+}
+
+.chat-spinner {
+  display: inline-block;
+  width: 11px; height: 11px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 0.3rem;
+}
+
+.chat-turn-meta {
+  font-size: 0.7rem;
+  color: var(--muted);
+  padding: 0 0.15rem;
+  align-self: flex-start;
+}
+
+/* ── Chat input area ── */
+.ws-chat-input-area {
+  border-top: 1px solid var(--border);
+  padding: 0.6rem 0.75rem;
+  background: var(--bg2);
+  flex-shrink: 0;
+}
+.ws-input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+.ws-chat-textarea {
+  flex: 1;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.88rem;
+  resize: none;
+  min-height: 38px;
+  max-height: 110px;
+  overflow-y: auto;
+  font-family: inherit;
+  line-height: 1.5;
+  transition: border-color 0.2s;
+}
+.ws-chat-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(167,139,250,0.1);
+}
+.ws-chat-textarea:disabled { opacity: 0.45; cursor: not-allowed; }
+.ws-input-hint {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-top: 0.3rem;
+  padding-left: 0.1rem;
+}
+
+/* ── Test panel ── */
+.ws-test-panel {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+  padding: 0.35rem 1rem 0.5rem;
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.ws-test-header {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 700;
+  padding: 0.15rem 0 0.3rem;
+  user-select: none;
+}
+.ws-test-output {
+  margin: 0;
+  font-size: 0.72rem;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text);
+  line-height: 1.45;
+  max-height: 130px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.ws-test-result {
+  font-size: 0.82rem;
+  margin-top: 0.4rem;
+  font-weight: 600;
+}
+.ws-test-result.pass         { color: var(--green); }
+.ws-test-result.fail         { color: #f85149; }
+.ws-test-result.error-result { color: var(--orange); }
+
+/* ── Mobile (≤700 px) ── */
+@media (max-width: 700px) {
+  body.workspace-page { height: 100dvh; }
+  .ws-panels {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(240px, 40vh) 1fr;
+    overflow-y: hidden;
+  }
+  .ws-source-panel {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .ws-toolbar-title { max-width: 140px; font-size: 0.85rem; }
+}
+@media (max-width: 400px) {
+  .ws-toolbar { padding: 0.4rem 0.5rem; gap: 0.3rem; }
+  .btn-xs { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+}
+
+/* ── History panel ── */
+.ws-main { position: relative; }
+
+.ws-history-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 99;
+  display: none;
+  cursor: pointer;
+}
+.ws-history-backdrop.open { display: block; }
+
+.ws-history-drawer {
+  position: absolute;
+  top: 0; right: 0;
+  width: min(400px, 95%);
+  height: 100%;
+  background: var(--bg2);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  transform: translateX(100%);
+  transition: transform 0.22s ease;
+}
+.ws-history-drawer.open { transform: translateX(0); }
+
+.ws-history-drawer-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.75rem;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.ws-history-drawer-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+.ws-history-close-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  line-height: 1;
+}
+.ws-history-close-btn:hover { background: rgba(255,255,255,0.07); color: var(--text); }
+
+.ws-history-list {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  min-height: 0;
+}
+.ws-history-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.85rem 0.75rem;
+  color: var(--muted);
+  font-size: 0.83rem;
+}
+.ws-history-empty {
+  padding: 0.85rem 0.75rem;
+  color: var(--muted);
+  font-size: 0.83rem;
+  font-style: italic;
+}
+
+.ws-history-entry {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.12s;
+  user-select: none;
+}
+.ws-history-entry:hover:not(.no-source) { background: rgba(255,255,255,0.04); }
+.ws-history-entry.selected {
+  background: rgba(167,139,250,0.1);
+  border-left: 3px solid var(--accent);
+  padding-left: calc(0.75rem - 3px);
+}
+.ws-history-entry.no-source { opacity: 0.45; cursor: default; }
+
+.ws-history-entry-top {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.2rem;
+}
+.ws-hist-badge {
+  font-size: 0.63rem;
+  font-weight: 700;
+  padding: 0.08rem 0.38rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.ws-hist-badge.generate { background: rgba(96,214,250,0.15); color: var(--cyan); }
+.ws-hist-badge.chat     { background: rgba(167,139,250,0.15); color: var(--accent); }
+.ws-history-entry-time {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-left: auto;
+}
+.ws-history-entry-msg {
+  font-size: 0.8rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-history-entry.no-source .ws-history-entry-msg { color: var(--muted); font-style: italic; }
+
+/* ── History source preview ── */
+.ws-hist-preview {
+  border-top: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  max-height: 45%;
+  min-height: 0;
+}
+.ws-hist-preview-hdr {
+  padding: 0.35rem 0.75rem;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.ws-hist-preview-pre {
+  flex: 1;
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.73rem;
+  font-family: 'Courier New', Consolas, 'Liberation Mono', monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #e6edf3;
+  background: #0a0d14;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  min-height: 0;
+  line-height: 1.5;
+}
+.ws-hist-preview-actions {
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg3);
+  flex-shrink: 0;
+}
+
+/* ── Toast ── */
+.ws-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  background: #1e2130;
+  border: 1px solid var(--border);
+  color: var(--green, #3fb950);
+  padding: 0.5rem 1.5rem;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  z-index: 300;
+  pointer-events: none;
+  transition: opacity 0.3s, transform 0.3s;
+}
+.ws-toast.ws-toast-hide {
+  opacity: 0;
+  transform: translateX(-50%) translateY(0.5rem);
+}
+</style>
+{{end}}
+
+{{define "content"}}
+<div class="ws-wrap">
+
+  <!-- Loading state -->
+  <div class="ws-loading" id="wsLoading">
+    <span class="spinner"></span> Loading workspace…
+  </div>
+
+  <!-- Error state -->
+  <div id="wsError" style="display:none; padding:2rem;"></div>
+
+  <!-- Main workspace (hidden until loaded) -->
+  <div class="ws-main" id="wsMain" style="display:none">
+
+    <!-- Toolbar -->
+    <div class="ws-toolbar">
+      <span class="ws-toolbar-title" id="wsTitle">…</span>
+      <div class="ws-toolbar-group">
+        <a id="backBtn" href="#" class="btn btn-secondary btn-xs">← Back</a>
+        <button id="saveBtn" class="btn btn-secondary btn-xs">💾 Save</button>
+        <button id="buildBtn" class="btn btn-primary btn-xs">⚙ Build</button>
+        <button id="playBtn" class="btn btn-play btn-xs" style="display:none">▶ Play</button>
+        <button id="testBtn" class="btn btn-secondary btn-xs" style="display:none">🧪 Run Test</button>
+        <button id="historyBtn" class="btn btn-secondary btn-xs">📜 History</button>
+        <button id="publishBtn" class="btn btn-secondary btn-xs">🌐 Publish</button>
+        <button id="deleteBtn" class="btn btn-danger btn-xs">🗑 Delete</button>
+      </div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="ws-status" id="wsStatus"></div>
+
+    <!-- Build log (shown on failed builds) -->
+    <div id="wsBuildLog" style="display:none"></div>
+
+    <!-- Test output panel (shown during/after test run) -->
+    <div id="wsTestPanel" class="ws-test-panel" style="display:none">
+      <div class="ws-test-header">🧪 Test Output</div>
+      <pre id="wsTestOutput" class="ws-test-output"></pre>
+      <div id="wsTestResult" class="ws-test-result" style="display:none"></div>
+    </div>
+
+    <!-- Panels -->
+    <div class="ws-panels">
+
+      <!-- Left: Source -->
+      <div class="ws-source-panel">
+        <div class="ws-panel-header">
+          <span>Inform 7 Source</span>
+          <div class="ws-panel-right">
+            <label class="edit-toggle-label">
+              <input type="checkbox" id="editToggle"> Edit manually
+            </label>
+          </div>
+        </div>
+        <textarea
+          id="wsSourceEditor"
+          class="ws-source-editor"
+          readonly
+          spellcheck="false"
+          placeholder="Your Inform 7 source will appear here…"
+        ></textarea>
+        <div class="ws-source-hint" id="wsSourceHint"></div>
+      </div>
+
+      <!-- Right: Chat -->
+      <div class="ws-chat-panel">
+        <div class="ws-panel-header">
+          <span>AI Assistant</span>
+          <div class="ws-panel-right">
+            <span id="publishPill" class="publish-pill" style="display:none"></span>
+          </div>
+        </div>
+
+        <div class="ws-chat-history" id="wsChatHistory">
+          <div class="chat-empty" id="chatEmpty">
+            <div class="icon">🤖</div>
+            <div>Describe a change to make, or ask a question about your story.</div>
+            <div style="font-size:0.78rem;margin-top:0.25rem;">Source is loaded from GCS and ready to edit.</div>
+          </div>
+        </div>
+
+        <div class="ws-chat-input-area">
+          <div class="ws-input-row">
+            <textarea
+              id="wsChatInput"
+              class="ws-chat-textarea"
+              placeholder="Ask the AI to modify the story…"
+              rows="2"
+            ></textarea>
+            <button id="wsSendBtn" class="btn btn-primary btn-xs">Send</button>
+          </div>
+          <div class="ws-input-hint">⌘/Ctrl+Enter to send</div>
+        </div>
+      </div>
+
+    </div><!-- .ws-panels -->
+
+    <!-- History backdrop -->
+    <div id="wsHistoryBackdrop" class="ws-history-backdrop"></div>
+
+    <!-- History drawer -->
+    <div id="wsHistoryDrawer" class="ws-history-drawer">
+      <div class="ws-history-drawer-hdr">
+        <span class="ws-history-drawer-title">Version History</span>
+        <button id="wsHistoryCloseBtn" class="ws-history-close-btn" title="Close history">✕</button>
+      </div>
+      <div id="wsHistoryListEl" class="ws-history-list">
+        <div class="ws-history-loading" id="wsHistoryLoadingEl">
+          <span class="spinner"></span> Loading history…
+        </div>
+      </div>
+      <div id="wsHistoryPreviewEl" class="ws-hist-preview" style="display:none">
+        <div class="ws-hist-preview-hdr" id="wsHistoryPreviewTitle">Source preview</div>
+        <pre id="wsHistoryPreviewContent" class="ws-hist-preview-pre"></pre>
+        <div class="ws-hist-preview-actions">
+          <button id="wsHistoryRestoreBtn" class="btn btn-primary btn-xs" disabled>↩ Restore this version</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div id="wsToast" class="ws-toast" style="display:none"></div>
+
+  </div><!-- #wsMain -->
+
+</div><!-- .ws-wrap -->
+{{end}}
+
+{{define "scripts"}}
+<script src="/static/ai_workspace.js"></script>
+{{end}}

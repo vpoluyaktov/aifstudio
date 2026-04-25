@@ -1,0 +1,405 @@
+{{template "layout.html" .}}
+
+{{define "title"}}StoryCloud — Interactive Fiction{{end}}
+
+{{define "content"}}
+<div class="main">
+
+  <!-- Terminal-style page header -->
+  <div class="crt-page-header">
+    <div class="crt-page-title">IFDB GAME CATALOGUE</div>
+    <div class="crt-page-sub">SEARCH THOUSANDS OF TEXT ADVENTURES. PLAY INSTANTLY IN YOUR BROWSER.</div>
+  </div>
+
+  <!-- Search row -->
+  <div class="crt-search-row" id="searchForm-wrapper">
+    <form class="crt-search-form" id="searchForm" onsubmit="return false;">
+      <span class="crt-search-prompt">SEARCH&gt;</span>
+      <input type="search" id="searchInput" class="crt-search-input"
+             placeholder="ZORK, HITCHHIKER, COLOSSAL CAVE..."
+             autocomplete="off" autofocus>
+      <button class="btn btn-primary" id="searchBtn" type="submit">[ GO ]</button>
+    </form>
+  </div>
+
+  <!-- Continue your games -->
+  <div id="continueSection" style="display:none">
+    <div class="continue-header">
+      <span class="continue-title">RECENT GAMES</span>
+      <a href="/history" class="continue-see-all">[ SEE ALL ]</a>
+    </div>
+    <div id="continueList" class="continue-list"></div>
+  </div>
+
+  <!-- Results area -->
+  <div id="resultsArea"></div>
+
+</div>
+{{end}}
+
+{{define "head"}}
+<style>
+.crt-page-header { padding: 2.5rem 0 1.5rem; }
+.crt-page-title {
+  font-family: var(--pixel-mono);
+  font-size: clamp(22px, 5vw, 36px);
+  color: var(--crt-blue);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+.crt-page-sub {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  max-width: 560px;
+}
+.crt-search-row { margin-bottom: 2rem; }
+.crt-search-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--crt-border);
+  background: rgba(4,17,11,0.7);
+  padding: 0.5rem 1rem;
+}
+.crt-search-prompt {
+  font-family: var(--pixel-mono);
+  font-size: 18px;
+  color: var(--crt-dim);
+  flex-shrink: 0;
+}
+.crt-search-input {
+  flex: 1;
+  font-family: var(--pixel-mono);
+  font-size: 18px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--crt-fg);
+  outline: none;
+  box-shadow: none;
+  padding: 0;
+  text-transform: uppercase;
+}
+.crt-search-input::placeholder { color: rgba(120,255,175,0.25); }
+.crt-search-input:focus { border: none; box-shadow: none; }
+
+/* Results header */
+.results-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 2rem 0 1rem;
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.results-count { color: var(--crt-fg); font-size: 18px; }
+
+.result-list { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.result-item {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  background: rgba(4,17,11,0.85);
+  border: 1px solid var(--crt-border);
+  box-shadow: 0 0 16px rgba(120,255,175,0.06), inset 0 0 30px rgba(0,0,0,0.4);
+  border-radius: 4px;
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  text-decoration: none;
+  color: var(--crt-fg);
+}
+.result-item:hover {
+  border-color: var(--crt-fg);
+  text-decoration: none;
+  color: var(--crt-fg);
+}
+.result-cover {
+  width: 64px;
+  height: 64px;
+  border-radius: 2px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(120,255,175,0.05);
+  border: 1px solid var(--crt-border);
+}
+.result-cover-placeholder {
+  width: 64px;
+  height: 64px;
+  border-radius: 2px;
+  background: rgba(120,255,175,0.04);
+  border: 1px solid var(--crt-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  flex-shrink: 0;
+  color: var(--crt-dim);
+}
+.result-info { flex: 1; min-width: 0; }
+.result-title {
+  font-family: var(--pixel-mono);
+  font-size: 18px;
+  color: var(--crt-fg);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 0.2rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.result-meta {
+  font-family: var(--pixel-mono);
+  font-size: 15px;
+  color: var(--crt-dim);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  text-transform: uppercase;
+}
+.result-rating { color: var(--crt-amber); }
+.result-formats {
+  margin-left: auto;
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+.fmt-badge {
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  background: rgba(120,255,175,0.08);
+  color: var(--crt-dim);
+  border: 1px solid var(--crt-border);
+  border-radius: 2px;
+  padding: 0.1rem 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Continue your games widget */
+.continue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.continue-title {
+  font-family: var(--pixel-mono);
+  font-size: 18px;
+  color: var(--crt-blue);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+.continue-see-all {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  color: var(--crt-dim);
+}
+.continue-see-all:hover { color: var(--crt-fg); text-decoration: none; }
+
+.continue-list {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+}
+
+.continue-card {
+  flex: 1;
+  min-width: 180px;
+  max-width: 260px;
+  background: rgba(4,17,11,0.85);
+  border: 1px solid var(--crt-border);
+  border-radius: 4px;
+  padding: 0.9rem 1rem;
+  text-decoration: none;
+  color: var(--crt-fg);
+  transition: border-color 0.15s;
+  display: block;
+}
+.continue-card:hover {
+  border-color: var(--crt-fg);
+  text-decoration: none;
+  color: var(--crt-fg);
+}
+.continue-card-title {
+  font-family: var(--pixel-mono);
+  font-size: 17px;
+  color: var(--crt-fg);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.3rem;
+}
+.continue-card-meta {
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  color: var(--crt-dim);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  text-transform: uppercase;
+}
+.continue-badge {
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.continue-badge-running   { color: var(--crt-fg); animation: crt-blink 1s step-end infinite; }
+.continue-badge-suspended { color: var(--crt-amber); }
+.continue-badge-finished  { color: var(--crt-dim); opacity: 0.7; }
+</style>
+{{end}}
+
+{{define "scripts"}}
+<script>
+(function() {
+  // ── Continue your games widget ──────────────────────────────────────────────
+  var continueSection = document.getElementById('continueSection');
+  var continueList    = document.getElementById('continueList');
+
+  apiFetch('/api/runs/by-user?limit=3')
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(data) {
+      if (!data || !data.runs || data.runs.length === 0) return;
+      continueSection.style.display = '';
+      data.runs.forEach(function(run) {
+        var badgeCls = 'continue-badge ';
+        if (run.status === 'running')        badgeCls += 'continue-badge-running';
+        else if (run.status === 'suspended') badgeCls += 'continue-badge-suspended';
+        else                                 badgeCls += 'continue-badge-finished';
+
+        var href = '/play/' + encodeURIComponent(run.id);
+        var meta = '<span class="' + badgeCls + '">' + escHtml(run.status) + '</span>';
+        if (run.lastActiveAt) meta += '<span>' + relativeTime(run.lastActiveAt) + '</span>';
+
+        var a = document.createElement('a');
+        a.className = 'continue-card';
+        a.href = href;
+        a.innerHTML =
+          '<div class="continue-card-title">' + escHtml(run.title || run.id) + '</div>'
+          + '<div class="continue-card-meta">' + meta + '</div>';
+        continueList.appendChild(a);
+      });
+    })
+    .catch(function() { /* silently hide widget on error */ });
+
+  function relativeTime(isoStr) {
+    var then = new Date(isoStr).getTime();
+    var diff = Date.now() - then;
+    var sec  = Math.floor(diff / 1000);
+    if (sec < 60)   return 'just now';
+    var min = Math.floor(sec / 60);
+    if (min < 60)   return min + 'm ago';
+    var hr = Math.floor(min / 60);
+    if (hr < 24)    return hr + 'h ago';
+    var days = Math.floor(hr / 24);
+    return days + 'd ago';
+  }
+
+  // ── Search ──────────────────────────────────────────────────────────────────
+  var form    = document.getElementById('searchForm');
+  var input   = document.getElementById('searchInput');
+  var btn     = document.getElementById('searchBtn');
+  var area    = document.getElementById('resultsArea');
+  var current = '';
+
+  form.addEventListener('submit', doSearch);
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') doSearch();
+  });
+
+  // Debounce for live search
+  var timer = null;
+  input.addEventListener('input', function() {
+    clearTimeout(timer);
+    timer = setTimeout(doSearch, 400);
+  });
+
+  function doSearch() {
+    var q = input.value.trim();
+    if (!q || q === current) return;
+    current = q;
+    btn.disabled = true;
+    area.innerHTML = '<div class="loading-area"><span class="spinner"></span> Searching…</div>';
+
+    apiFetch('/api/ifdb/search?q=' + encodeURIComponent(q) + '&limit=50')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        btn.disabled = false;
+        renderResults(data, q);
+      })
+      .catch(function(err) {
+        btn.disabled = false;
+        area.innerHTML = '<div class="error-msg">Search failed: ' + escHtml(err.message) + '</div>';
+      });
+  }
+
+  function renderResults(data, q) {
+    if (!data.results || data.results.length === 0) {
+      area.innerHTML = '<div class="empty-state">[--] No results found for <strong>' + escHtml(q) + '</strong></div>';
+      return;
+    }
+    var html = '<div class="results-header">'
+      + '<span class="results-count">' + data.count + '</span> result' + (data.count !== 1 ? 's' : '') + ' for <em>' + escHtml(q) + '</em>'
+      + '</div><div class="result-list">';
+
+    data.results.forEach(function(g) {
+      html += '<a class="result-item" href="/games/' + escHtml(g.id) + '">';
+
+      if (g.coverArtURL) {
+        html += '<img class="result-cover" src="' + escHtml(g.coverArtURL) + '" alt="Cover" loading="lazy" onerror="this.style.display=\'none\'">';
+      } else {
+        html += '<div class="result-cover-placeholder">[?]</div>';
+      }
+
+      html += '<div class="result-info">'
+        + '<div class="result-title">' + escHtml(g.title) + '</div>'
+        + '<div class="result-meta">';
+
+      if (g.authors && g.authors.length) {
+        html += '<span class="result-authors">by ' + escHtml(g.authors.join(', ')) + '</span>';
+      }
+      if (g.year) {
+        html += '<span class="result-year">:: ' + g.year + '</span>';
+      }
+      if (g.rating) {
+        var filled = Math.round(g.rating);
+        var empty  = Math.max(0, 5 - filled);
+        html += '<span class="result-rating">['
+          + '*'.repeat(filled)
+          + '-'.repeat(empty)
+          + '] ' + g.rating.toFixed(1) + '</span>';
+      }
+      if (g.formats && g.formats.length) {
+        html += '<span class="result-formats">';
+        g.formats.forEach(function(f) { html += '<span class="fmt-badge">' + escHtml(f) + '</span>'; });
+        html += '</span>';
+      }
+
+      html += '</div></div></a>';
+    });
+
+    html += '</div>';
+    area.innerHTML = html;
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+})();
+</script>
+{{end}}

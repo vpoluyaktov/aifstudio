@@ -1,0 +1,203 @@
+{{template "layout.html" .}}
+
+{{define "title"}}My Projects — StoryCloud{{end}}
+
+{{define "content"}}
+<div class="main">
+
+  <div class="proj-header">
+    <div>
+      <h1 class="proj-title">MY PROJECTS</h1>
+      <p class="proj-sub">Interactive fiction you've created with StoryCloud AI.</p>
+    </div>
+    <a href="/create" class="btn btn-primary">[ NEW PROJECT ]</a>
+  </div>
+
+  <div id="projLoading" class="loading-area">
+    <span class="spinner"></span> Loading projects…
+  </div>
+
+  <div id="projError" style="display:none"></div>
+
+  <div id="projEmpty" class="empty-state" style="display:none">
+    <div class="icon">[ ]</div>
+    <div>No projects yet — create your first game.</div>
+    <div style="margin-top:0.5rem;font-size:16px;">
+      <a href="/create">[ Create a project ]</a> and bring your story to life.
+    </div>
+  </div>
+
+  <div id="projGrid" class="proj-grid" style="display:none"></div>
+
+</div>
+{{end}}
+
+{{define "head"}}
+<style>
+.proj-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+.proj-title {
+  font-family: var(--pixel-mono);
+  font-size: 28px;
+  color: var(--crt-blue);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin: 0 0 0.3rem;
+}
+.proj-sub {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+/* Project grid */
+.proj-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+/* Project card */
+.proj-card {
+  background: rgba(4,17,11,0.85);
+  border: 1px solid var(--crt-border);
+  box-shadow: 0 0 16px rgba(120,255,175,0.06), inset 0 0 30px rgba(0,0,0,0.4);
+  border-radius: 4px;
+  padding: 1.1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  transition: border-color 0.15s;
+}
+.proj-card:hover { border-color: var(--crt-fg); }
+
+.proj-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.proj-card-title {
+  font-family: var(--pixel-mono);
+  font-size: 18px;
+  color: var(--crt-fg);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.badge-published {
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--crt-blue);
+  flex-shrink: 0;
+}
+
+.proj-card-desc {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  color: var(--crt-dim);
+  line-height: 1.4;
+  flex: 1;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  min-height: 3.8rem;
+}
+
+.proj-card-meta {
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 0.1rem;
+}
+
+.proj-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+.btn-ai {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: rgba(120,255,175,0.08);
+  border: 1px solid var(--crt-fg);
+  color: var(--crt-fg);
+  border-radius: 2px;
+  padding: 0.3rem 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.btn-ai:hover { background: rgba(120,255,175,0.18); border-color: var(--crt-fg); color: var(--crt-fg); text-decoration: none; }
+
+.btn-view {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: transparent;
+  color: var(--crt-dim);
+  border: 1px solid rgba(120,255,175,0.3);
+  border-radius: 2px;
+  padding: 0.3rem 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.btn-view:hover { border-color: var(--crt-dim); color: var(--crt-fg); text-decoration: none; }
+
+.btn-delete-proj {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--crt-red);
+  border: 1px solid rgba(255,85,85,0.4);
+  border-radius: 2px;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-left: auto;
+}
+.btn-delete-proj:hover { background: rgba(255,85,85,0.15); border-color: var(--crt-red); }
+
+@media (max-width: 600px) {
+  .proj-grid   { grid-template-columns: 1fr; }
+  .proj-header { flex-direction: column; }
+}
+</style>
+{{end}}
+
+{{define "scripts"}}
+<script src="/static/projects.js"></script>
+{{end}}

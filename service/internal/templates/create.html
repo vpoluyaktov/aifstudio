@@ -1,0 +1,304 @@
+{{template "layout.html" .}}
+
+{{define "title"}}New Project — StoryCloud{{end}}
+
+{{define "content"}}
+<div class="main">
+
+  <div class="page-header">
+    <h1 class="page-title">CREATE NEW PROJECT</h1>
+    <p class="page-sub">Write an Inform 7 story, or describe your idea and let AI write it for you.</p>
+  </div>
+
+  <div id="errorArea"></div>
+
+  <div class="card create-form">
+    <div class="form-group">
+      <label class="form-label" for="projName">PROJECT NAME</label>
+      <input
+        type="text"
+        id="projName"
+        placeholder="e.g. The Blue Door"
+        maxlength="80"
+        autocomplete="off"
+      >
+      <span class="form-hint">1-80 characters</span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="projDesc">
+        GAME DESCRIPTION
+        <span class="form-label-hint">// optional — used by AI to generate source</span>
+      </label>
+      <textarea
+        id="projDesc"
+        rows="4"
+        placeholder="e.g. A haunted Victorian house with three floors. There is a ghost child who helps the player solve the mystery."
+        maxlength="2000"
+      ></textarea>
+      <span class="form-hint">0-2000 characters // What should your game be about?</span>
+    </div>
+
+    <!-- AI creation path -->
+    <div class="ai-card">
+      <div class="ai-card-header">
+        <span class="ai-badge">[AI]</span>
+        <strong>GENERATE WITH AI</strong>
+        <span class="form-label-hint">// Let the AI write the Inform 7 source from your description</span>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" id="generateBtn" onclick="generateWithAI()">
+          [ GENERATE GAME ]
+        </button>
+      </div>
+    </div>
+
+    <div class="divider"><span>-- or write it yourself --</span></div>
+
+    <!-- Manual creation path -->
+    <div class="form-group">
+      <label class="form-label" for="projSource">
+        INFORM 7 SOURCE
+        <span class="form-label-hint">// Write your story here</span>
+      </label>
+      <textarea
+        id="projSource"
+        rows="16"
+        placeholder='"My Adventure" by Your Name.
+
+The Living Room is a room. "A comfortable room."
+
+A red ball is in the Living Room.
+
+Instead of taking the red ball:
+    say "You pick up the ball. It feels warm."'
+        spellcheck="false"
+      ></textarea>
+      <span class="form-hint">Inform 7 source code // up to 500 KB</span>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" id="createBtn" onclick="createProject()">
+        [ CREATE PROJECT ]
+      </button>
+      <a href="/" class="btn btn-secondary">[ ABORT ]</a>
+    </div>
+  </div>
+
+</div>
+{{end}}
+
+{{define "head"}}
+<style>
+.page-header { margin-bottom: 2rem; }
+.page-title {
+  font-family: var(--pixel-mono);
+  font-size: 28px;
+  color: var(--crt-blue);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 0.5rem;
+}
+.page-sub {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.create-form { max-width: 800px; }
+
+.form-group { margin-bottom: 1.5rem; }
+.form-label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 0.5rem;
+  color: var(--crt-blue);
+}
+.form-label-hint {
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.form-hint {
+  display: block;
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 0.4rem;
+}
+
+/* AI card */
+.ai-card {
+  background: rgba(120,255,175,0.04);
+  border: 1px solid rgba(120,255,175,0.2);
+  border-radius: 4px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.ai-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  color: var(--crt-fg);
+  text-transform: uppercase;
+}
+.ai-badge {
+  font-family: var(--pixel-mono);
+  font-size: 15px;
+  color: var(--crt-blue);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Divider */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.75rem 0;
+  font-family: var(--pixel-mono);
+  font-size: 15px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+}
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--crt-border);
+}
+
+/* Source editor textarea — keep monospace feel */
+#projSource {
+  font-family: 'Courier New', Consolas, 'Liberation Mono', monospace;
+  font-size: 15px;
+  line-height: 1.6;
+  background: rgba(0,0,0,0.4);
+  color: var(--crt-fg);
+  border: none;
+  border-bottom: 1px solid rgba(120,255,175,0.35);
+  border-radius: 0;
+  min-height: 240px;
+  text-transform: none;
+}
+#projSource:focus {
+  border-bottom-color: var(--crt-fg);
+  box-shadow: 0 2px 0 rgba(120,255,175,0.2);
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+</style>
+{{end}}
+
+{{define "scripts"}}
+<script>
+function generateWithAI() {
+  var name = document.getElementById('projName').value.trim();
+  var desc = document.getElementById('projDesc').value.trim();
+  var btn  = document.getElementById('generateBtn');
+  var errEl= document.getElementById('errorArea');
+
+  errEl.innerHTML = '';
+
+  if (!name) {
+    errEl.innerHTML = '<div class="error-msg">Project name is required.</div>';
+    document.getElementById('projName').focus();
+    return;
+  }
+  if (!desc) {
+    errEl.innerHTML = '<div class="error-msg">A game description is required for AI generation.</div>';
+    document.getElementById('projDesc').focus();
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '[ GENERATING... ]';
+
+  apiFetch('/api/projects', {
+    method: 'POST',
+    body: JSON.stringify({ name: name, description: desc, source: '' }),
+  })
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d, status: r.status }; }); })
+    .then(function(res) {
+      if (!res.ok) {
+        btn.disabled = false;
+        btn.textContent = '[ GENERATE GAME ]';
+        var msg = res.data.error || 'Failed to create project';
+        if (res.status === 401) msg = 'You must be signed in to create a project.';
+        errEl.innerHTML = '<div class="error-msg">' + escHtml(msg) + '</div>';
+        return;
+      }
+      window.location.href = '/projects/' + res.data.id + '/ai?autostart=1';
+    })
+    .catch(function(err) {
+      btn.disabled = false;
+      btn.textContent = '[ GENERATE GAME ]';
+      errEl.innerHTML = '<div class="error-msg">Request failed: ' + escHtml(err.message) + '</div>';
+    });
+}
+
+function createProject() {
+  var name   = document.getElementById('projName').value.trim();
+  var desc   = document.getElementById('projDesc').value.trim();
+  var source = document.getElementById('projSource').value;
+  var btn    = document.getElementById('createBtn');
+  var errEl  = document.getElementById('errorArea');
+
+  errEl.innerHTML = '';
+
+  if (!name) {
+    errEl.innerHTML = '<div class="error-msg">Project name is required.</div>';
+    document.getElementById('projName').focus();
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '[ CREATING... ]';
+
+  apiFetch('/api/projects', {
+    method: 'POST',
+    body: JSON.stringify({ name: name, description: desc, source: source }),
+  })
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d, status: r.status }; }); })
+    .then(function(res) {
+      if (!res.ok) {
+        btn.disabled = false;
+        btn.textContent = '[ CREATE PROJECT ]';
+        var msg = res.data.error || 'Failed to create project';
+        if (res.status === 401) msg = 'You must be signed in to create a project.';
+        errEl.innerHTML = '<div class="error-msg">' + escHtml(msg) + '</div>';
+        return;
+      }
+      window.location.href = '/projects/' + res.data.id;
+    })
+    .catch(function(err) {
+      btn.disabled = false;
+      btn.textContent = '[ CREATE PROJECT ]';
+      errEl.innerHTML = '<div class="error-msg">Request failed: ' + escHtml(err.message) + '</div>';
+    });
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+{{end}}

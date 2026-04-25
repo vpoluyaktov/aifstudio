@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{block "title" .}}StoryCloud{{end}}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
+  <!--
+    scAuth bootstrap: creates window.scAuth synchronously so apiFetch() can
+    await scAuth.ready before the Firebase module script has run.
+    auth.js (module, deferred) fills in the real implementations and resolves
+    ready once the user's auth state is confirmed.
+  -->
+  <script>
+  (function () {
+    var _r;
+    window.scAuth = {
+      ready:         new Promise(function (r) { _r = r; }),
+      _resolveReady: null,
+      getToken:      async function () { return null; },
+      signOut:       function () { window.location.assign('/login'); },
+      currentUser:   null,
+    };
+    window.scAuth._resolveReady = _r;
+  }());
+  </script>
+  <script type="module" src="/static/auth.js"></script>
+  {{block "head" .}}{{end}}
+</head>
+<body class="{{block "bodyclass" .}}{{end}}">
+
+<div class="crt-outer-frame">
+
+  <!-- Terminal top bar -->
+  <div class="crt-frame-topbar">
+    <span class="crt-frame-termname">DEC VT100</span>
+  </div>
+
+  <!-- Nav — outside scroll area so it stays visible -->
+  <nav class="nav">
+    <button class="nav-hamburger" id="navHamburger" aria-label="Menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <a href="/" class="nav-brand">&gt; STORYCLOUD</a>
+    <div class="nav-links">
+      <a href="/">IFDB Game Catalogue</a>
+      <a href="/history">My Games</a>
+      <a href="/projects">My Projects</a>
+      <a href="/community">Community</a>
+    </div>
+    <div id="nav-user-area" class="nav-user-area"></div>
+  </nav>
+  <div class="nav-mobile-dropdown" id="navMobileDropdown">
+    <a href="/">IFDB Game Catalogue</a>
+    <a href="/history">My Games</a>
+    <a href="/projects">My Projects</a>
+    <a href="/community">Community</a>
+  </div>
+
+  <!-- Scrollable content area -->
+  <div class="crt-frame-content">
+    {{block "content" .}}{{end}}
+
+    <footer class="footer">
+      STORYCLOUD SYS v{{.Version}} &nbsp;::&nbsp; {{.Environment}} ENV
+    </footer>
+  </div>
+
+  <!-- RS-232 indicator bar -->
+  <div class="crt-frame-bottombar">
+    <span class="crt-ind-group">
+      <span class="crt-ind-unit">
+        <span class="crt-led" id="appLedCarrier"></span>
+        <span class="crt-ind-label">CARRIER</span>
+      </span>
+      <span class="crt-ind-unit">
+        <span class="crt-led" id="appLedDtr"></span>
+        <span class="crt-ind-label">DTR</span>
+      </span>
+    </span>
+    <span class="crt-ind-group">
+      <span class="crt-ind-unit">
+        <span class="crt-led" id="appLedRx"></span>
+        <span class="crt-ind-label">RX</span>
+      </span>
+      <span class="crt-ind-unit">
+        <span class="crt-led" id="appLedTx"></span>
+        <span class="crt-ind-label">TX</span>
+      </span>
+    </span>
+  </div>
+
+</div><!-- .crt-outer-frame -->
+
+<script src="/static/app.js"></script>
+{{block "scripts" .}}{{end}}
+
+<script>
+(function () {
+  var ledCarrier = document.getElementById('appLedCarrier');
+  var ledDtr     = document.getElementById('appLedDtr');
+  var ledRx      = document.getElementById('appLedRx');
+  var ledTx      = document.getElementById('appLedTx');
+  if (!ledCarrier) return;
+
+  function ledOn(el)  { if (el) el.classList.add('led-on'); }
+  function ledOff(el) { if (el) el.classList.remove('led-on'); }
+
+  ledOn(ledCarrier);
+  ledOn(ledDtr);
+
+  function rxBlink() {
+    ledOn(ledRx);
+    setTimeout(function () { ledOff(ledRx); }, 80);
+    setTimeout(rxBlink, 1800 + Math.random() * 3200);
+  }
+  rxBlink();
+
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (t && (t.tagName === 'A' || t.tagName === 'BUTTON' || t.closest('a,button'))) {
+      ledOn(ledTx);
+      setTimeout(function () { ledOff(ledTx); }, 180);
+    }
+  });
+}());
+</script>
+
+</body>
+</html>

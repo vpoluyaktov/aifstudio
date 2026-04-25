@@ -1,0 +1,665 @@
+{{template "layout.html" .}}
+
+{{define "title"}}Project — StoryCloud{{end}}
+
+{{define "content"}}
+<div class="main" id="pageRoot" data-project-id="{{.ProjectId}}">
+
+  <div class="page-top">
+    <a href="/" class="back-link">&lt; BACK TO SEARCH</a>
+  </div>
+
+  <div id="loadingState" class="loading-area">
+    <span class="spinner"></span> Loading project…
+  </div>
+  <div id="errorArea"></div>
+  <div id="aiWorkspaceLink" style="display:none; margin-bottom:1rem;">
+    <a id="aiWorkspaceBtn" href="#" class="btn btn-ai-workspace">[ AI WORKSPACE ]</a>
+  </div>
+
+  <!-- Project content (hidden until loaded) -->
+  <div id="projectContent" style="display:none">
+
+    <div class="project-header">
+      <div class="editable-field name-field">
+        <div class="field-display-row">
+          <h1 class="project-name" id="projectName" onclick="startEditName()"></h1>
+          <span class="edit-pencil" onclick="startEditName()" title="Edit name">[E]</span>
+          <span class="field-status" id="nameStatus"></span>
+        </div>
+        <input type="text" class="project-name-input" id="projectNameInput" style="display:none"
+               autocomplete="off"
+               onkeydown="if(event.key==='Enter'){this.blur();} if(event.key==='Escape'){cancelEditName();}"
+               onblur="finishEditName()">
+      </div>
+      <div class="editable-field desc-field">
+        <div class="field-display-row">
+          <div class="project-description" id="projectDesc" onclick="startEditDesc()"></div>
+          <span class="edit-pencil" onclick="startEditDesc()" title="Edit description">[E]</span>
+          <span class="field-status" id="descStatus"></span>
+        </div>
+        <textarea class="project-desc-input" id="projectDescInput" style="display:none"
+                  rows="2" autocomplete="off"
+                  onkeydown="if(event.key==='Escape'){cancelEditDesc();}"
+                  onblur="finishEditDesc()"></textarea>
+      </div>
+      <div class="project-meta" id="projectMeta"></div>
+    </div>
+
+    <div class="editor-section">
+      <div class="editor-toolbar">
+        <span class="section-title">SOURCE EDITOR</span>
+        <div class="editor-actions">
+          <button class="btn btn-secondary" id="saveBtn" onclick="saveSource()">[SAVE]</button>
+          <button class="btn btn-primary"   id="buildBtn" onclick="startBuild()">[BUILD]</button>
+        </div>
+      </div>
+      <textarea id="sourceEditor" class="source-editor" spellcheck="false"></textarea>
+      <div id="saveStatus" class="save-status"></div>
+    </div>
+
+    <div class="builds-section">
+      <div class="builds-header">
+        <h2 class="section-title">BUILDS</h2>
+        <span id="buildSpinner" class="spinner" style="display:none"></span>
+      </div>
+      <div id="buildsArea">
+        <div class="empty-state"><div class="icon">[ ]</div>No builds yet. Hit [BUILD] to compile.</div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+{{end}}
+
+{{define "head"}}
+<style>
+.page-top { margin-bottom: 1.25rem; }
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--crt-dim);
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: color 0.15s;
+}
+.back-link:hover { color: var(--crt-fg); text-decoration: none; }
+
+.project-header { margin-bottom: 1.5rem; }
+.project-name {
+  font-family: var(--pixel-mono);
+  font-size: 26px;
+  color: var(--crt-blue);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 0;
+  cursor: pointer;
+}
+.project-meta {
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Inline editable fields */
+.editable-field { margin-bottom: 0.2rem; }
+.name-field     { margin-bottom: 0.35rem; }
+.desc-field     { margin-bottom: 0.55rem; }
+.field-display-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.edit-pencil {
+  opacity: 0;
+  transition: opacity 0.15s;
+  color: var(--crt-dim);
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+  user-select: none;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.editable-field:hover .edit-pencil { opacity: 0.65; }
+.edit-pencil:hover { opacity: 1 !important; color: var(--crt-fg); }
+.project-description {
+  cursor: pointer;
+  color: var(--crt-dim);
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1.4;
+}
+.project-description.empty { font-style: italic; opacity: 0.45; }
+.project-name-input {
+  font-family: var(--pixel-mono);
+  font-size: 26px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--crt-fg);
+  border-radius: 0;
+  color: var(--crt-blue);
+  width: 100%;
+  max-width: 640px;
+  outline: none;
+  padding: 0 0 0.1rem;
+  line-height: 1.2;
+  box-shadow: 0 2px 0 rgba(120,255,175,0.2);
+}
+.project-desc-input {
+  width: 100%;
+  max-width: 640px;
+  background: rgba(4,17,11,0.85);
+  border: 1px solid rgba(120,255,175,0.4);
+  border-radius: 2px;
+  color: var(--crt-fg);
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1.4;
+  padding: 0.35rem 0.6rem;
+  outline: none;
+  resize: vertical;
+  min-height: 5rem;
+}
+.field-status {
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.field-status.success { color: var(--crt-fg); }
+.field-status.error   { color: var(--crt-red); }
+
+/* Editor section */
+.editor-section {
+  background: rgba(4,17,11,0.85);
+  border: 1px solid var(--crt-border);
+  box-shadow: 0 0 16px rgba(120,255,175,0.06), inset 0 0 30px rgba(0,0,0,0.4);
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  background: rgba(0,0,0,0.3);
+  border-bottom: 1px solid var(--crt-border);
+  gap: 0.5rem;
+}
+.editor-actions { display: flex; gap: 0.5rem; }
+
+.source-editor {
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  background: rgba(0,0,0,0.5);
+  color: var(--crt-fg);
+  font-family: 'Courier New', Consolas, 'Liberation Mono', monospace;
+  font-size: 14px;
+  line-height: 1.65;
+  min-height: 360px;
+  resize: vertical;
+  padding: 1rem 1.25rem;
+  text-transform: none;
+}
+.source-editor:focus {
+  outline: none;
+  box-shadow: none;
+  border-color: transparent;
+}
+
+.save-status {
+  min-height: 28px;
+  padding: 0.3rem 1rem;
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--crt-dim);
+}
+.save-status.success { color: var(--crt-fg); }
+.save-status.error   { color: var(--crt-red); }
+
+/* Builds section */
+.section-title {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--crt-blue);
+}
+.builds-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.builds-section h2 { font-size: 16px; }
+
+.build-list { display: flex; flex-direction: column; gap: 0.6rem; }
+.build-item {
+  background: rgba(4,17,11,0.85);
+  border: 1px solid var(--crt-border);
+  border-radius: 4px;
+  padding: 0.85rem 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.build-status { flex-shrink: 0; }
+.build-time {
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+  flex: 1;
+  min-width: 120px;
+}
+.build-duration {
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  color: var(--crt-dim);
+  text-transform: uppercase;
+}
+.build-error {
+  flex-basis: 100%;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: var(--crt-red);
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(255,85,85,0.06);
+  border: 1px solid rgba(255,85,85,0.2);
+  border-radius: 2px;
+  padding: 0.4rem 0.6rem;
+  text-transform: none;
+}
+.build-actions { margin-left: auto; }
+
+/* AI workspace link */
+.btn-ai-workspace {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: rgba(168,212,255,0.08);
+  border: 1px solid rgba(168,212,255,0.35);
+  color: var(--crt-blue);
+  border-radius: 2px;
+  padding: 0.4rem 1rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-ai-workspace:hover {
+  background: rgba(168,212,255,0.15);
+  border-color: var(--crt-blue);
+  color: var(--crt-blue);
+  text-decoration: none;
+}
+</style>
+{{end}}
+
+{{define "scripts"}}
+<script>
+(function() {
+  var root      = document.getElementById('pageRoot');
+  var projectId = root.getAttribute('data-project-id');
+  var errArea   = document.getElementById('errorArea');
+
+  var project   = null;
+  var refreshTimer = null;
+
+  // Load project data
+  function loadProject() {
+    apiFetch('/api/projects/' + encodeURIComponent(projectId))
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d, status: r.status }; }); })
+      .then(function(res) {
+        document.getElementById('loadingState').style.display = 'none';
+        if (!res.ok) {
+          var msg = res.data.error || 'Failed to load project';
+          if (res.status === 401) msg = 'You must be signed in to view this project.';
+          errArea.innerHTML = '<div class="error-msg">' + escHtml(msg) + '</div>';
+          return;
+        }
+        project = res.data;
+        renderProject();
+        document.getElementById('projectContent').style.display = '';
+        loadBuilds();
+      })
+      .catch(function(err) {
+        document.getElementById('loadingState').style.display = 'none';
+        errArea.innerHTML = '<div class="error-msg">Failed to load: ' + escHtml(err.message) + '</div>';
+      });
+  }
+
+  function renderProject() {
+    document.getElementById('projectName').textContent = project.name;
+    renderDesc();
+    document.getElementById('projectMeta').textContent =
+      'Created ' + formatDate(project.createdAt) + ' · Updated ' + formatDate(project.updatedAt);
+    document.title = project.name + ' — StoryCloud';
+    // Source is now in GCS — editor starts empty; load from sourceUrl if available
+    if (project.sourceUrl) {
+      fetch(project.sourceUrl)
+        .then(function(r) { return r.ok ? r.text() : ''; })
+        .then(function(src) { document.getElementById('sourceEditor').value = src || ''; })
+        .catch(function() {});
+    } else {
+      document.getElementById('sourceEditor').value = '';
+    }
+    // Show AI Workspace link
+    var aiLink = document.getElementById('aiWorkspaceLink');
+    var aiBtn  = document.getElementById('aiWorkspaceBtn');
+    if (aiLink && aiBtn) {
+      aiBtn.href = '/projects/' + encodeURIComponent(projectId) + '/ai';
+      aiLink.style.display = '';
+    }
+  }
+
+  // Load + refresh builds
+  function loadBuilds() {
+    if (!project) return;
+    var latestBuildId = project.latestBuildId;
+    if (!latestBuildId) { return; }
+
+    apiFetch('/api/projects/' + encodeURIComponent(projectId) + '/builds/' + encodeURIComponent(latestBuildId))
+      .then(function(r) { return r.json(); })
+      .then(function(b) {
+        renderBuilds([b]);
+        scheduleRefresh(b);
+      })
+      .catch(function() {});
+  }
+
+  function renderBuilds(builds) {
+    var area = document.getElementById('buildsArea');
+    if (!builds || !builds.length) {
+      area.innerHTML = '<div class="empty-state"><div class="icon">[ ]</div>No builds yet.</div>';
+      return;
+    }
+    var html = '<div class="build-list">';
+    builds.forEach(function(b) {
+      var badgeCls = 'badge-' + b.status;
+      var durStr = b.durationMs ? (b.durationMs / 1000).toFixed(1) + 's' : '';
+      var badgeLabel = b.status === 'pending' ? '[PENDING]'
+        : b.status === 'running' ? '[RUNNING]'
+        : b.status === 'succeeded' ? '[DONE]'
+        : b.status === 'failed' ? '[FAIL]'
+        : b.status === 'cancelled' ? '[VOID]'
+        : '[' + b.status.toUpperCase() + ']';
+      html += '<div class="build-item">'
+        + '<span class="build-status"><span class="badge ' + badgeCls + '">' + badgeLabel + '</span></span>'
+        + '<span class="build-time">' + formatDate(b.createdAt) + '</span>'
+        + (durStr ? '<span class="build-duration">' + durStr + '</span>' : '')
+        + (b.status === 'succeeded'
+            ? '<span class="build-actions"><button class="btn btn-play" onclick="playBuild(\'' + escHtml(b.id) + '\',this)">[PLAY]</button></span>'
+            : '')
+        + '</div>';
+      if ((b.status === 'failed' || b.status === 'succeeded') && b.errorMessage) {
+        html += '<div class="build-error">' + escHtml(b.errorMessage) + '</div>';
+      }
+    });
+    html += '</div>';
+    area.innerHTML = html;
+  }
+
+  function scheduleRefresh(b) {
+    clearTimeout(refreshTimer);
+    var spinner = document.getElementById('buildSpinner');
+    if (b.status === 'pending' || b.status === 'running') {
+      spinner.style.display = '';
+      refreshTimer = setTimeout(function() {
+        loadBuilds();
+      }, 5000);
+    } else {
+      spinner.style.display = 'none';
+    }
+  }
+
+  // Save source
+  window.saveSource = function() {
+    var source  = document.getElementById('sourceEditor').value;
+    var btn     = document.getElementById('saveBtn');
+    var statusEl= document.getElementById('saveStatus');
+
+    btn.disabled = true;
+    btn.textContent = '[SAVING...]';
+    statusEl.className = 'save-status';
+    statusEl.textContent = '';
+
+    apiFetch('/api/projects/' + encodeURIComponent(projectId) + '/source', {
+      method: 'PUT',
+      body: JSON.stringify({ source: source }),
+    })
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+      .then(function(res) {
+        btn.disabled = false;
+        btn.textContent = '[SAVE]';
+        if (!res.ok) {
+          statusEl.className = 'save-status error';
+          statusEl.textContent = 'Save failed: ' + (res.data.error || 'unknown error');
+        } else {
+          statusEl.className = 'save-status success';
+          statusEl.textContent = '[OK] Saved (' + res.data.sourceBytes + ' bytes)';
+          if (project) {
+            project.updatedAt = res.data.updatedAt;
+            project.source = source;
+          }
+          setTimeout(function() {
+            if (statusEl.className === 'save-status success') {
+              statusEl.textContent = '';
+            }
+          }, 3000);
+        }
+      })
+      .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = '[SAVE]';
+        statusEl.className = 'save-status error';
+        statusEl.textContent = 'Save failed: ' + err.message;
+      });
+  };
+
+  // Trigger build
+  window.startBuild = function() {
+    var btn = document.getElementById('buildBtn');
+    btn.disabled = true;
+    btn.textContent = '[BUILDING...]';
+    errArea.innerHTML = '';
+
+    apiFetch('/api/projects/' + encodeURIComponent(projectId) + '/builds', {
+      method: 'POST',
+      body: '{}',
+    })
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d, status: r.status }; }); })
+      .then(function(res) {
+        btn.disabled = false;
+        btn.textContent = '[BUILD]';
+        if (!res.ok) {
+          var msg = res.data.error || 'Build failed';
+          if (res.status === 409) msg = 'A build is already in progress. Please wait.';
+          errArea.innerHTML = '<div class="error-msg">' + escHtml(msg) + '</div>';
+          return;
+        }
+        // Update latestBuildId and start polling
+        if (project) project.latestBuildId = res.data.id;
+        renderBuilds([res.data]);
+        scheduleRefresh(res.data);
+      })
+      .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = '[BUILD]';
+        errArea.innerHTML = '<div class="error-msg">Build request failed: ' + escHtml(err.message) + '</div>';
+      });
+  };
+
+  // Play a succeeded build
+  window.playBuild = function(buildId, btn) {
+    btn.disabled = true;
+    btn.textContent = '[STARTING...]';
+
+    apiFetch('/api/runs', {
+      method: 'POST',
+      body: JSON.stringify({ sourceType: 'build', buildId: buildId }),
+    })
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+      .then(function(res) {
+        if (!res.ok) {
+          btn.disabled = false;
+          btn.textContent = '[PLAY]';
+          errArea.innerHTML = '<div class="error-msg">Could not start: ' + escHtml(res.data.error || 'error') + '</div>';
+          return;
+        }
+        window.location.href = '/play/' + res.data.id;
+      })
+      .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = '[PLAY]';
+        errArea.innerHTML = '<div class="error-msg">Failed: ' + escHtml(err.message) + '</div>';
+      });
+  };
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleString();
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Inline edit helpers ────────────────────────────────────────────
+  function renderDesc() {
+    var el = document.getElementById('projectDesc');
+    if (project && project.description) {
+      el.textContent = project.description;
+      el.classList.remove('empty');
+    } else {
+      el.textContent = 'No description';
+      el.classList.add('empty');
+    }
+  }
+
+  function flashStatus(id, cls, text) {
+    var el = document.getElementById(id);
+    el.className  = 'field-status ' + cls;
+    el.textContent = text;
+    setTimeout(function() { el.className = 'field-status'; el.textContent = ''; }, 2500);
+  }
+
+  function patchMeta(payload, onSuccess, onError) {
+    apiFetch('/api/projects/' + encodeURIComponent(projectId), {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+      .then(function(res) {
+        if (!res.ok) {
+          onError(res.data.error || 'Save failed');
+        } else {
+          project.name        = res.data.name;
+          project.description = res.data.description;
+          project.updatedAt   = res.data.updatedAt;
+          document.getElementById('projectMeta').textContent =
+            'Created ' + formatDate(project.createdAt) + ' · Updated ' + formatDate(project.updatedAt);
+          document.title = project.name + ' — StoryCloud';
+          onSuccess();
+        }
+      })
+      .catch(function(err) { onError(err.message); });
+  }
+
+  var _nameOrig = '';
+  window.startEditName = function() {
+    var row   = document.querySelector('.name-field .field-display-row');
+    var input = document.getElementById('projectNameInput');
+    if (input.style.display !== 'none') return;
+    _nameOrig   = project.name;
+    input.value = project.name;
+    row.style.display   = 'none';
+    input.style.display = '';
+    input.focus();
+    input.select();
+  };
+  window.cancelEditName = function() {
+    document.querySelector('.name-field .field-display-row').style.display = 'flex';
+    document.getElementById('projectNameInput').style.display = 'none';
+  };
+  window.finishEditName = function() {
+    var row     = document.querySelector('.name-field .field-display-row');
+    var input   = document.getElementById('projectNameInput');
+    var newName = input.value.trim();
+    input.style.display = 'none';
+    row.style.display   = 'flex';
+    if (!newName || newName === _nameOrig) return;
+    document.getElementById('projectName').textContent = newName;
+    patchMeta({ name: newName, description: project.description || '' },
+      function() {
+        document.getElementById('projectName').textContent = project.name;
+        flashStatus('nameStatus', 'success', '[OK]');
+      },
+      function(msg) {
+        document.getElementById('projectName').textContent = _nameOrig;
+        project.name = _nameOrig;
+        flashStatus('nameStatus', 'error', msg);
+      }
+    );
+  };
+
+  var _descOrig = '';
+  window.startEditDesc = function() {
+    var row      = document.querySelector('.desc-field .field-display-row');
+    var textarea = document.getElementById('projectDescInput');
+    if (textarea.style.display !== 'none') return;
+    _descOrig      = project.description || '';
+    textarea.value = _descOrig;
+    row.style.display      = 'none';
+    textarea.style.display = '';
+    textarea.focus();
+  };
+  window.cancelEditDesc = function() {
+    document.querySelector('.desc-field .field-display-row').style.display = 'flex';
+    document.getElementById('projectDescInput').style.display = 'none';
+  };
+  window.finishEditDesc = function() {
+    var row      = document.querySelector('.desc-field .field-display-row');
+    var textarea = document.getElementById('projectDescInput');
+    var newDesc  = textarea.value.trim();
+    textarea.style.display = 'none';
+    row.style.display      = 'flex';
+    if (newDesc === _descOrig) return;
+    project.description = newDesc;
+    renderDesc();
+    patchMeta({ name: project.name, description: newDesc },
+      function() { flashStatus('descStatus', 'success', '[OK]'); },
+      function(msg) {
+        project.description = _descOrig;
+        renderDesc();
+        flashStatus('descStatus', 'error', msg);
+      }
+    );
+  };
+
+  loadProject();
+})();
+</script>
+{{end}}

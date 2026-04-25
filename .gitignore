@@ -1,0 +1,70 @@
+# Binaries and build artifacts
+# Anchor directory patterns to the repo root so we don't accidentally
+# ignore Go packages named "build", "bin", or "dist" nested under service/.
+storycloud
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/bin/
+/build/
+/dist/
+
+# Go
+vendor/
+go.work.sum
+
+# Environment files
+.env
+*.env.local
+.env.*.local
+
+# Local runtime data — SQLite DB, blob storage, transcripts. The `./data/`
+# directory is created by the container on first start (bind-mounted at
+# /app/data) and must never be committed.
+/data/
+
+# Internal tooling — agent state, scratch space. Not part of the repo.
+/.claude/
+
+# Terraform
+# CI copies stage/backend.tf or prod/backend.tf into terraform/backend.tf
+# at init time; don't track the copy.
+terraform/backend.tf
+terraform/.terraform/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform.lock.hcl
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Test coverage
+coverage.out
+coverage.html
+*.cover

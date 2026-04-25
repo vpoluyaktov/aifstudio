@@ -1,0 +1,272 @@
+{{template "layout.html" .}}
+
+{{define "title"}}Create account — StoryCloud{{end}}
+
+{{define "bodyclass"}}auth-page{{end}}
+
+{{define "content"}}
+<div class="auth-container">
+  <div class="auth-box">
+    <div class="auth-system-header">
+      <div class="auth-sys-line">STORYCLOUD MULTI-USER SYSTEM V2.6</div>
+      <div class="auth-sys-line auth-sys-dim">NEW USER REGISTRATION</div>
+      <div class="auth-sys-divider">&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;</div>
+    </div>
+
+    <form id="registerForm" class="auth-form" onsubmit="return false;">
+      <div class="auth-field">
+        <label for="email">USERNAME/EMAIL:</label>
+        <input id="email" type="email" name="email" required
+               autocomplete="username"
+               placeholder="user@host" autofocus>
+      </div>
+      <div class="auth-field">
+        <label for="password">PASSWORD:</label>
+        <input id="password" type="password" name="password" required
+               autocomplete="new-password" minlength="6"
+               placeholder="min 6 characters">
+      </div>
+      <div class="auth-field">
+        <label for="confirmPassword">CONFIRM PASSWORD:</label>
+        <input id="confirmPassword" type="password" name="confirmPassword" required
+               autocomplete="new-password" minlength="6"
+               placeholder="repeat password">
+      </div>
+
+      <div id="error" class="auth-error" role="alert" style="display:none"></div>
+
+      <button id="submit" type="submit" class="auth-btn">[ CREATE ACCOUNT ]</button>
+    </form>
+
+    <div class="auth-links">
+      <a href="/login">[ SIGN IN TO EXISTING ACCOUNT ]</a>
+    </div>
+  </div>
+</div>
+{{end}}
+
+{{define "head"}}
+<style>
+body.auth-page .nav,
+body.auth-page .nav-mobile-dropdown,
+body.auth-page .footer { display: none; }
+
+.auth-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: #010805;
+  background-image: repeating-linear-gradient(
+    to bottom, transparent 0px, transparent 2px, rgba(0,0,0,0.12) 3px
+  );
+}
+.auth-box {
+  width: 100%;
+  max-width: 460px;
+  background: rgba(4,17,11,0.9);
+  border: 1px solid rgba(120,255,175,0.3);
+  box-shadow: 0 0 40px rgba(120,255,175,0.08), inset 0 0 40px rgba(0,0,0,0.5);
+  padding: 2rem 2rem 1.5rem;
+}
+.auth-system-header { margin-bottom: 1.75rem; }
+.auth-sys-line {
+  font-family: var(--pixel-mono);
+  font-size: 17px;
+  color: var(--crt-fg);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  line-height: 1.5;
+}
+.auth-sys-dim { color: rgba(120,255,175,0.45); }
+.auth-sys-divider {
+  color: rgba(120,255,175,0.25);
+  margin-top: 0.75rem;
+  font-family: var(--pixel-mono);
+  font-size: 17px;
+  letter-spacing: 1px;
+}
+.auth-form { display: flex; flex-direction: column; gap: 1.1rem; }
+.auth-field { display: flex; flex-direction: column; gap: 0.2rem; }
+.auth-field label {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  color: var(--crt-blue);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.auth-field input {
+  font-family: var(--pixel-mono);
+  font-size: 18px;
+  text-transform: none;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(120,255,175,0.35);
+  border-radius: 0;
+  color: var(--crt-fg);
+  padding: 0.25rem 0;
+  width: 100%;
+  outline: none;
+  box-shadow: none;
+}
+.auth-field input:focus {
+  border-bottom-color: var(--crt-fg);
+  box-shadow: 0 2px 0 rgba(120,255,175,0.2);
+}
+.auth-field input::placeholder { color: rgba(120,255,175,0.25); }
+.auth-error {
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  color: var(--crt-red);
+  border: 1px solid rgba(255,85,85,0.3);
+  background: rgba(255,85,85,0.05);
+  padding: 0.5rem 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.auth-btn {
+  width: 100%;
+  font-family: var(--pixel-mono);
+  font-size: 19px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  background: rgba(120,255,175,0.08);
+  border: 1px solid rgba(120,255,175,0.5);
+  color: var(--crt-fg);
+  padding: 0.6rem;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  border-radius: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+.auth-btn:hover { background: rgba(120,255,175,0.18); border-color: var(--crt-fg); }
+.auth-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.auth-links {
+  margin-top: 1.25rem;
+  text-align: center;
+  font-family: var(--pixel-mono);
+  font-size: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.auth-links a { color: var(--crt-dim); }
+.auth-links a:hover { color: var(--crt-fg); text-decoration: none; }
+
+@media (max-height: 700px) {
+  .auth-box { padding: 1rem 1.25rem 0.75rem; }
+  .auth-system-header { margin-bottom: 0.75rem; }
+  .auth-sys-line:not(:first-child) { display: none; }
+  .auth-sys-divider { margin-top: 0.4rem; }
+  .auth-form { gap: 0.65rem; }
+  .auth-btn { padding: 0.4rem; margin-top: 0.25rem; }
+  .auth-links-row { min-height: 0.4rem; }
+  .auth-links { margin-top: 0.5rem; }
+}
+</style>
+{{end}}
+
+{{define "scripts"}}
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+var form          = document.getElementById('registerForm');
+var emailEl       = document.getElementById('email');
+var passEl        = document.getElementById('password');
+var confirmPassEl = document.getElementById('confirmPassword');
+var submitEl      = document.getElementById('submit');
+var errorEl       = document.getElementById('error');
+
+function nextParam() {
+  var next = new URLSearchParams(location.search).get('next') || '';
+  return (next.startsWith('/') && !next.startsWith('//')) ? next : '/';
+}
+
+function showError(msg, isInfo) {
+  errorEl.textContent  = msg;
+  errorEl.style.color  = isInfo ? 'var(--cyan)' : '';
+  errorEl.style.display = '';
+}
+
+function hideError() { errorEl.style.display = 'none'; }
+
+function mapError(code) {
+  switch (code) {
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists.';
+    case 'auth/weak-password':
+      return 'Password must be at least 6 characters.';
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.';
+    case 'auth/network-request-failed':
+      return 'Network error. Check your connection.';
+    default:
+      return 'Registration failed. Please try again.';
+  }
+}
+
+async function init() {
+  var resp, cfg;
+  try {
+    resp = await fetch('/api/config');
+    cfg  = await resp.json();
+  } catch (_) {
+    showError('Network error. Check your connection.');
+    return;
+  }
+
+  if (!resp.ok || cfg.error === 'auth_disabled') {
+    submitEl.disabled = true;
+    showError('Local development mode — signing in automatically…', true);
+    setTimeout(function () { location.assign(nextParam()); }, 800);
+    return;
+  }
+
+  var app  = initializeApp(cfg.firebase);
+  var auth = getAuth(app);
+
+  form.addEventListener('submit', async function () {
+    hideError();
+    var email    = emailEl.value.trim();
+    var password = passEl.value;
+    var confirm  = confirmPassEl.value;
+
+    if (!email || !password || !confirm) {
+      showError('Please fill in all fields.');
+      return;
+    }
+    if (password !== confirm) {
+      showError('Passwords do not match.');
+      return;
+    }
+    if (password.length < 6) {
+      showError('Password must be at least 6 characters.');
+      return;
+    }
+
+    submitEl.disabled    = true;
+    submitEl.textContent = 'Creating account…';
+
+    try {
+      // Firebase auto signs-in on success.
+      await createUserWithEmailAndPassword(auth, email, password);
+      location.assign(nextParam());
+    } catch (err) {
+      submitEl.disabled    = false;
+      submitEl.textContent = '[ CREATE ACCOUNT ]';
+      showError(mapError(err.code));
+    }
+  });
+}
+
+init().catch(function (err) {
+  showError('Registration failed. Please try again.');
+  console.error(err);
+});
+</script>
+{{end}}

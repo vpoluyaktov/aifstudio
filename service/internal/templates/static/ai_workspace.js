@@ -93,13 +93,6 @@
 
     sourceCollapseBtn.addEventListener('click', toggleSourcePanel);
 
-    // On mobile, start with source panel collapsed so chat is visible first.
-    if (window.matchMedia('(max-width: 700px)').matches) {
-      wsSourcePanel.classList.add('collapsed');
-      sourceCollapseBtn.textContent = '▸';
-      sourceCollapseBtn.setAttribute('aria-expanded', 'false');
-    }
-
     // Cmd/Ctrl+Enter sends message
     wsChatInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {

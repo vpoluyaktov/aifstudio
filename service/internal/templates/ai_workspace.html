@@ -690,10 +690,10 @@ body.workspace-page > .footer { display: none; }
     <!-- Panels -->
     <div class="ws-panels">
 
-      <!-- Left: Source -->
-      <div class="ws-source-panel">
+      <!-- Left: Source — starts collapsed on mobile (CSS gates the class via media query) -->
+      <div class="ws-source-panel collapsed">
         <div class="ws-panel-header">
-          <button id="sourceCollapseBtn" class="ws-source-collapse-btn" title="Toggle source panel" aria-expanded="true">▾</button>
+          <button id="sourceCollapseBtn" class="ws-source-collapse-btn" title="Toggle source panel" aria-expanded="false">▸</button>
           <span>Inform 7 Source</span>
           <div class="ws-panel-right">
             <label class="edit-toggle-label">

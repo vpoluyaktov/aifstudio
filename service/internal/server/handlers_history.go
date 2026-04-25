@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"time"
 
-	"storycloud/internal/auth"
+	"aifstudio/internal/auth"
 )
 
 var turnIDRE = regexp.MustCompile(`^t-[0-9A-Z]{26}$`)

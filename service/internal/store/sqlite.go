@@ -18,7 +18,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	_ "modernc.org/sqlite" // registers "sqlite" driver
 
-	"storycloud/internal/auth"
+	"aifstudio/internal/auth"
 )
 
 // schema is the canonical DDL applied idempotently on every open.

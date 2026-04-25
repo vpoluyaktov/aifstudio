@@ -1,4 +1,4 @@
-module storycloud
+module aifstudio
 
 go 1.23
 

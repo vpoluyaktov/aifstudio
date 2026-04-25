@@ -12,10 +12,10 @@ import (
 
 	"github.com/oklog/ulid/v2"
 
-	"storycloud/internal/auth"
-	"storycloud/internal/ifdb"
-	"storycloud/internal/runner"
-	"storycloud/internal/store"
+	"aifstudio/internal/auth"
+	"aifstudio/internal/ifdb"
+	"aifstudio/internal/runner"
+	"aifstudio/internal/store"
 )
 
 var (

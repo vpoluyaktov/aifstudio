@@ -7,13 +7,13 @@ import (
 	"io/fs"
 	"net/http"
 
-	"storycloud/internal/auth"
-	"storycloud/internal/config"
-	"storycloud/internal/ifdb"
-	openaiClient "storycloud/internal/openai"
-	"storycloud/internal/runner"
-	"storycloud/internal/store"
-	"storycloud/internal/templates"
+	"aifstudio/internal/auth"
+	"aifstudio/internal/config"
+	"aifstudio/internal/ifdb"
+	openaiClient "aifstudio/internal/openai"
+	"aifstudio/internal/runner"
+	"aifstudio/internal/store"
+	"aifstudio/internal/templates"
 )
 
 // BuilderService is the interface satisfied by *build.Manager.

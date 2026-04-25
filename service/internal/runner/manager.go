@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"storycloud/internal/store"
+	"aifstudio/internal/store"
 )
 
 // Manager holds active run sessions and performs periodic cleanup.

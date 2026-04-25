@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"storycloud/internal/store"
+	"aifstudio/internal/store"
 )
 
 const transcriptContentType = "text/plain; charset=utf-8"

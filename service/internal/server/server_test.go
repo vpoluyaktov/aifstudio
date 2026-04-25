@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"storycloud/internal/auth"
-	"storycloud/internal/config"
-	"storycloud/internal/store"
+	"aifstudio/internal/auth"
+	"aifstudio/internal/config"
+	"aifstudio/internal/store"
 )
 
 // mockStore is a minimal in-memory store for server tests.

@@ -11,8 +11,8 @@ import (
 
 	"github.com/oklog/ulid/v2"
 
-	"storycloud/internal/auth"
-	"storycloud/internal/store"
+	"aifstudio/internal/auth"
+	"aifstudio/internal/store"
 )
 
 // ── handleTogglePublish — PATCH /api/projects/{id}/publish ───────────────────

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"storycloud/internal/ifdb"
+	"aifstudio/internal/ifdb"
 )
 
 var ifdbIDRE = regexp.MustCompile(`^[a-z0-9]{10,32}$`)

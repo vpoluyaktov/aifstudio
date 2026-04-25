@@ -11,13 +11,13 @@ import (
 	"syscall"
 	"time"
 
-	"storycloud/internal/auth"
-	"storycloud/internal/build"
-	"storycloud/internal/config"
-	"storycloud/internal/ifdb"
-	"storycloud/internal/runner"
-	"storycloud/internal/server"
-	"storycloud/internal/store"
+	"aifstudio/internal/auth"
+	"aifstudio/internal/build"
+	"aifstudio/internal/config"
+	"aifstudio/internal/ifdb"
+	"aifstudio/internal/runner"
+	"aifstudio/internal/server"
+	"aifstudio/internal/store"
 )
 
 func main() {

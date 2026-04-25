@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"storycloud/internal/server"
+	"aifstudio/internal/server"
 )
 
 // jl joins the given strings with "\n" and appends a trailing "\n".

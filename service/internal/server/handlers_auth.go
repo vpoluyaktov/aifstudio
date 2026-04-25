@@ -10,7 +10,7 @@ import (
 	"net/mail"
 	"strings"
 
-	"storycloud/internal/auth"
+	"aifstudio/internal/auth"
 )
 
 // sessionAuth type-asserts Server.auth to *auth.SessionAuth. Returns nil when

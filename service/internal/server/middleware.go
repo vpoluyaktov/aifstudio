@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"storycloud/internal/auth"
+	"aifstudio/internal/auth"
 )
 
 // suspendPathRE matches POST /api/runs/{id}/suspend so we can accept

@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"storycloud/internal/store"
+	"aifstudio/internal/store"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────

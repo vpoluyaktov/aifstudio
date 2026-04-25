@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"storycloud/internal/ifdb"
+	"aifstudio/internal/ifdb"
 )
 
 const testUserAgent = "StoryCloud/0.1 (contact: vpoluyaktov@gmail.com)"

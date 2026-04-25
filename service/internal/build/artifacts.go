@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"storycloud/internal/store"
+	"aifstudio/internal/store"
 )
 
 // uploadArtifacts uploads the compiled .ulx and build log to GCS.

@@ -11,9 +11,9 @@ import (
 
 	"github.com/oklog/ulid/v2"
 
-	"storycloud/internal/auth"
-	openaiPkg "storycloud/internal/openai"
-	"storycloud/internal/store"
+	"aifstudio/internal/auth"
+	openaiPkg "aifstudio/internal/openai"
+	"aifstudio/internal/store"
 )
 
 // newTurnID generates a new ai_turns document ID: "t-<ULID>".

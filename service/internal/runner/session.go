@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"storycloud/internal/store"
+	"aifstudio/internal/store"
 )
 
 // SessionStatus mirrors the run status values from §4.2.

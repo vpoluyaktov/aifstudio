@@ -9,7 +9,7 @@ import (
 	"io"
 	"time"
 
-	"storycloud/internal/auth"
+	"aifstudio/internal/auth"
 )
 
 // Source identifies where a story artifact comes from.

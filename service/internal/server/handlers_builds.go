@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"storycloud/internal/auth"
-	"storycloud/internal/build"
+	"aifstudio/internal/auth"
+	"aifstudio/internal/build"
 )
 
 const buildTestTimeout = 30 * time.Second

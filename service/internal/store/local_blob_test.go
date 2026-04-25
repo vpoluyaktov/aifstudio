@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"storycloud/internal/store"
+	"aifstudio/internal/store"
 )
 
 // newTestBlobStore creates a LocalBlobStore rooted at a temp directory.

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"storycloud/internal/auth"
-	"storycloud/internal/store"
+	"aifstudio/internal/auth"
+	"aifstudio/internal/store"
 )
 
 // MockStore is an in-memory test double for store.Store.

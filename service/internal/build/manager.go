@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"storycloud/internal/store"
+	"aifstudio/internal/store"
 )
 
 // logTail returns up to maxBytes of the trailing portion of s, for

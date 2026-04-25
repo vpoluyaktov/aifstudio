@@ -29,10 +29,10 @@ import (
 	"testing"
 	"time"
 
-	"storycloud/internal/auth"
-	"storycloud/internal/runner"
-	"storycloud/internal/server"
-	"storycloud/internal/store"
+	"aifstudio/internal/auth"
+	"aifstudio/internal/runner"
+	"aifstudio/internal/server"
+	"aifstudio/internal/store"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────

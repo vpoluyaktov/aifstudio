@@ -1,0 +1,15 @@
+{
+  "name": "aifstudio-e2e",
+  "version": "1.0.0",
+  "description": "Playwright end-to-end tests for AIFStudio",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "typescript": "^5.4.0"
+  }
+}

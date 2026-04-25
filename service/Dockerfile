@@ -38,6 +38,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # image with `.github/workflows/base-image.yml` and bump the tag below.
 FROM vpoluyaktov/aifstudio-base:frobtads-v2.0-inform7-10.1.2
 
+# Bake the version into the image so APP_VERSION doesn't need to be set in .env.
+ARG APP_VERSION=dev
+
 # App binary.
 COPY --from=gobuilder /out/aifstudio /usr/local/bin/aifstudio
 
@@ -48,6 +51,7 @@ USER app
 # image works under `docker run` without an `.env` file too.
 ENV PORT=8080 \
     TMPDIR=/tmp \
+    APP_VERSION=$APP_VERSION \
     DB_PATH=/app/data/db/aifstudio.db \
     STORAGE_PATH=/app/data/storage \
     PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games

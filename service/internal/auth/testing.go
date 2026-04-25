@@ -1,9 +1,9 @@
 // Package auth — testing helpers.
 //
-// This file adds VerifierIface and MockVerifier so server tests can exercise
-// the firebaseAuthRequired middleware without a live Firebase project.
-// It is safe to import from production code; MockVerifier is used exclusively
-// from _test.go files in practice.
+// VerifierIface and MockVerifier allow server tests to exercise the
+// sessionAuthRequired middleware without a live database or real sessions.
+// SessionAuth also satisfies VerifierIface so the same server.New signature
+// accepts both in production and in tests.
 package auth
 
 import (
@@ -13,21 +13,23 @@ import (
 	"strings"
 )
 
-// VerifierIface is the minimal interface implemented by both *Verifier and
-// *MockVerifier, enabling dependency injection in server tests without a live
-// Firebase project.
+// VerifierIface is the minimal interface implemented by both *SessionAuth and
+// *MockVerifier, enabling dependency injection in server tests.
 //
-// Methods:
-//   - FromRequest: extracts and verifies the token from Authorization header.
-//   - VerifyToken: verifies a raw token string (used by firebaseAuthRequired for
-//     the sendBeacon suspend ?token= query-param path, §22.5.4).
+//   - FromRequest: extracts and verifies auth from the request.
+//     *SessionAuth reads the aifstudio_session cookie.
+//     *MockVerifier reads the Authorization: Bearer header (test only).
+//   - VerifyToken: verifies a raw token string.
+//     *SessionAuth always returns an error (cookie-only auth).
+//     *MockVerifier looks up the token in a pre-registered map.
 type VerifierIface interface {
 	FromRequest(ctx context.Context, r *http.Request) (*User, error)
 	VerifyToken(ctx context.Context, idToken string) (*User, error)
 }
 
-// Compile-time assertion: *Verifier must satisfy VerifierIface.
-var _ VerifierIface = (*Verifier)(nil)
+// Compile-time assertions: both concrete types must satisfy VerifierIface.
+var _ VerifierIface = (*SessionAuth)(nil)
+var _ VerifierIface = (*MockVerifier)(nil)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MockVerifier
@@ -40,18 +42,27 @@ var _ VerifierIface = (*Verifier)(nil)
 //
 //	mv := auth.NewMockVerifier()
 //	mv.SetUser("token-a", &auth.User{UID: "uid-a", Email: "a@example.com"})
-//	mv.SetUser("token-b", &auth.User{UID: "uid-b", Email: "b@example.com"})
 //
 // Requests carrying "Authorization: Bearer token-a" are authenticated as uid-a.
 // Requests with no token or an unregistered token receive an error, which the
-// firebaseAuthRequired middleware translates to HTTP 401.
+// sessionAuthRequired middleware translates to HTTP 401.
 type MockVerifier struct {
-	users map[string]*User
+	users    map[string]*User
+	localDev bool // if true, always return a fixed local-dev user
 }
 
 // NewMockVerifier creates a MockVerifier with no registered users.
 func NewMockVerifier() *MockVerifier {
 	return &MockVerifier{users: make(map[string]*User)}
+}
+
+// NewLocalDevVerifier returns a MockVerifier that always authenticates with a
+// fixed "local-dev" user regardless of the token or cookie. Use in tests that
+// just need an authenticated server without real auth wiring.
+func NewLocalDevVerifier() *MockVerifier {
+	mv := NewMockVerifier()
+	mv.localDev = true
+	return mv
 }
 
 // SetUser registers a mapping from token to user. A request carrying
@@ -62,8 +73,11 @@ func (m *MockVerifier) SetUser(token string, u *User) {
 
 // FromRequest extracts the bearer token from the Authorization header and
 // returns the pre-configured User. Returns an error when the token is absent
-// or unregistered, simulating an invalid/expired Firebase ID token.
+// or unregistered, simulating an invalid or expired session.
 func (m *MockVerifier) FromRequest(_ context.Context, r *http.Request) (*User, error) {
+	if m.localDev {
+		return &User{UID: "local-dev", Email: "dev@local", Name: "Local Dev"}, nil
+	}
 	bearer := r.Header.Get("Authorization")
 	token, ok := strings.CutPrefix(bearer, "Bearer ")
 	if !ok || token == "" {
@@ -74,8 +88,10 @@ func (m *MockVerifier) FromRequest(_ context.Context, r *http.Request) (*User, e
 
 // VerifyToken looks up the raw token in the registered map and returns the
 // corresponding User. Returns an error if the token is not registered.
-// Called directly by firebaseAuthRequired for the sendBeacon suspend path.
 func (m *MockVerifier) VerifyToken(_ context.Context, idToken string) (*User, error) {
+	if m.localDev {
+		return &User{UID: "local-dev", Email: "dev@local", Name: "Local Dev"}, nil
+	}
 	if idToken == "" {
 		return nil, fmt.Errorf("auth: empty token")
 	}
@@ -85,6 +101,3 @@ func (m *MockVerifier) VerifyToken(_ context.Context, idToken string) (*User, er
 	}
 	return u, nil
 }
-
-// Compile-time assertion: *MockVerifier must satisfy VerifierIface.
-var _ VerifierIface = (*MockVerifier)(nil)

@@ -1216,7 +1216,7 @@ func TestAIAndCommunityRoutingSmoke(t *testing.T) {
 	if cfg.AIRateLimitPerUserBurst == 0 {
 		cfg.AIRateLimitPerUserBurst = 3
 	}
-	verifier, _ := auth.NewVerifier(context.Background(), "")
+	verifier := auth.NewLocalDevVerifier()
 	srv := server.New(cfg, newMockStore(), nil, nil, nil, verifier)
 	ts := httptest.NewServer(srv.SetupRoutes())
 	defer ts.Close()

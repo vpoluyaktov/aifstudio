@@ -31,19 +31,14 @@ func main() {
 
 	ctx := context.Background()
 
-	// --- Store (Firestore + GCS) ---
-	var st store.Store
-	if cfg.ProjectID != "" {
-		fs, err := store.NewFirestoreStore(ctx, cfg.ProjectID, cfg.FirestoreDatabaseName, cfg.GCSBucket)
-		if err != nil {
-			log.Fatalf("Failed to initialize Firestore: %v", err)
-		}
-		defer fs.Close() //nolint:errcheck
-		st = fs
-		slog.Info("firestore connected", "project", cfg.ProjectID, "db", cfg.FirestoreDatabaseName)
-	} else {
-		slog.Warn("GCP_PROJECT_ID not set — running without Firestore/GCS")
+	// --- Store (SQLite + local filesystem) ---
+	blob := store.NewLocalBlobStore(cfg.StoragePath)
+	st, err := store.NewSQLiteStore(ctx, cfg.DBPath, blob)
+	if err != nil {
+		log.Fatalf("Failed to initialize SQLite store: %v", err)
 	}
+	defer st.Close() //nolint:errcheck
+	slog.Info("sqlite connected", "path", cfg.DBPath, "storage", cfg.StoragePath)
 
 	// --- IFDB client ---
 	ifdbClient := ifdb.NewClient(ifdb.ClientOptions{
@@ -56,14 +51,12 @@ func main() {
 		PerIPBurst:  cfg.IFDBRateLimitPerIPBurst,
 	})
 
-	// Warm up IFDB in-memory cache from Firestore on cold start.
-	if st != nil {
-		if games, err := st.ListFreshCachedGames(ctx, time.Now()); err == nil {
-			for _, g := range games {
-				ifdbClient.SeedCache(g.TUID, g.Payload, g.ExpiresAt)
-			}
-			slog.Info("IFDB cache warmed", "entries", len(games))
+	// Warm up IFDB in-memory cache from SQLite on cold start.
+	if games, err := st.ListFreshCachedGames(ctx, time.Now()); err == nil {
+		for _, g := range games {
+			ifdbClient.SeedCache(g.TUID, g.Payload, g.ExpiresAt)
 		}
+		slog.Info("IFDB cache warmed", "entries", len(games))
 	}
 
 	// --- Runner ---
@@ -83,14 +76,25 @@ func main() {
 	// --- Build manager ---
 	buildMgr := build.NewManager(st, cfg.BuildTimeout)
 
-	// --- Auth verifier ---
-	authVerifier, err := auth.NewVerifier(ctx, cfg.ProjectID)
-	if err != nil {
-		log.Fatalf("auth verifier: %v", err)
-	}
+	// --- Session auth (replaces Firebase Auth) ---
+	sessionAuth := auth.NewSessionAuth(st, cfg.SessionMaxAge)
+
+	// --- Expired session sweep (background goroutine) ---
+	go func() {
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			n, err := st.DeleteExpiredSessions(context.Background(), time.Now())
+			if err != nil {
+				slog.Warn("expired session sweep failed", "err", err)
+			} else if n > 0 {
+				slog.Info("expired sessions swept", "count", n)
+			}
+		}
+	}()
 
 	// --- HTTP server ---
-	srv := server.New(cfg, st, ifdbClient, runMgr, buildMgr, authVerifier)
+	srv := server.New(cfg, st, ifdbClient, runMgr, buildMgr, sessionAuth)
 	handler := srv.SetupRoutes()
 
 	httpServer := &http.Server{
@@ -100,7 +104,7 @@ func main() {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	slog.Info("starting storycloud", "version", cfg.Version, "env", cfg.Environment, "port", cfg.Port)
+	slog.Info("starting aifstudio", "version", cfg.Version, "env", cfg.Environment, "port", cfg.Port)
 
 	go func() {
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {

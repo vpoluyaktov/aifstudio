@@ -17,7 +17,7 @@ import (
 )
 
 // suspendPathRE matches POST /api/runs/{id}/suspend so we can accept
-// the Firebase token via ?token= for sendBeacon callers (§22.5.4).
+// the token via ?token= for sendBeacon callers (legacy compatibility).
 var suspendPathRE = regexp.MustCompile(`^/api/runs/r-[0-9A-Z]{26}/suspend$`)
 
 // recoverMiddleware catches panics, logs them, and writes 500.
@@ -74,7 +74,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// maxBodyMiddleware limits request body size. WebSocket routes are excluded.
+// maxBodyMiddleware limits request body size.
 func maxBodyMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Skip body limit for WebSocket upgrades.
@@ -92,30 +92,34 @@ func maxBodyMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// isAllowlisted reports whether the request should bypass Firebase auth.
+// isAllowlisted reports whether the request should bypass session auth.
 //
-// Only /api/* routes (except /api/config) require server-side JWT verification.
-// Page routes are served without a server-side token check — auth.js /
-// onAuthStateChanged handles the client-side redirect to /login for
-// unauthenticated users. Browsers never send Authorization headers on normal
-// page navigations, so gating page routes server-side causes a login redirect
-// loop even for signed-in users.
+// Allow-listed paths (per §4 of ARCHITECTURE.md):
+//   - All non-/api/ paths (page routes + static assets; client-side auth handles these)
+//   - POST /api/auth/register
+//   - POST /api/auth/login
 func isAllowlisted(r *http.Request) bool {
 	if !strings.HasPrefix(r.URL.Path, "/api/") {
 		return true
 	}
-	return r.URL.Path == "/api/config"
+	switch r.URL.Path {
+	case "/api/auth/register":
+		return r.Method == http.MethodPost
+	case "/api/auth/login":
+		return r.Method == http.MethodPost
+	}
+	return false
 }
 
-// firebaseAuthRequired verifies the Authorization: Bearer <Firebase ID token>
-// on every request except allow-listed paths (§22.5.1). On success, stores
-// *auth.User in the context via auth.WithUser. On failure:
+// sessionAuthRequired verifies the aifstudio_session cookie on every request
+// except allow-listed paths. On success, stores *auth.User in the context.
+// On failure:
 //   - /api/* paths: 401 JSON {"error":"auth_required","code":"auth_required"}
-//   - page routes: 303 redirect to /login?next=<originalURI>
+//   - page routes:  303 redirect to /login?next=<originalURI>
 //
-// The POST /api/runs/{id}/suspend endpoint additionally accepts the token via
-// the ?token= query param (sendBeacon cannot set custom headers — §22.5.4).
-func (s *Server) firebaseAuthRequired(next http.Handler) http.Handler {
+// The POST /api/runs/{id}/suspend endpoint additionally accepts a bearer token
+// via ?token= for sendBeacon callers (legacy compatibility with MockVerifier tests).
+func (s *Server) sessionAuthRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isAllowlisted(r) {
 			next.ServeHTTP(w, r)
@@ -127,14 +131,15 @@ func (s *Server) firebaseAuthRequired(next http.Handler) http.Handler {
 			err  error
 		)
 
-		// sendBeacon suspend: accept ?token= when Authorization header is absent.
+		// Legacy sendBeacon suspend path: accept ?token= when Authorization header is
+		// present (MockVerifier in tests reads Bearer; production SessionAuth reads cookie).
 		if r.Method == http.MethodPost && suspendPathRE.MatchString(r.URL.Path) {
 			if token := r.URL.Query().Get("token"); token != "" {
 				user, err = s.auth.VerifyToken(r.Context(), token)
 			}
 		}
 
-		// Standard path: Authorization: Bearer <token>.
+		// Standard path: cookie (SessionAuth) or Bearer header (MockVerifier in tests).
 		if user == nil {
 			user, err = s.auth.FromRequest(r.Context(), r)
 		}
@@ -174,8 +179,7 @@ func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 }
 
 // Flush implements http.Flusher so that SSE handlers can push frames through the
-// logging wrapper without the type assertion w.(http.Flusher) failing (§14.4 of
-// ARCHITECTURE_AI_CREATE.md).
+// logging wrapper without the type assertion w.(http.Flusher) failing.
 func (rw *responseWriter) Flush() {
 	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
 		f.Flush()

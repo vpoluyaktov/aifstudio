@@ -9,16 +9,17 @@ import (
 
 // Config holds all application configuration loaded from environment variables.
 type Config struct {
-	Port                  string
-	Version               string
-	Environment           string
-	ProjectID             string
-	FirestoreDatabaseName string
-	GCSBucket          string
-	SourceSignedURLTTL time.Duration // SOURCE_SIGNED_URL_TTL: TTL for V4 signed source URLs (default 15m)
+	Port        string
+	Version     string
+	Environment string
 
-	FirebaseWebAPIKey  string
-	FirebaseAuthDomain string
+	// SQLite + local filesystem (replaces Firestore + GCS).
+	DBPath        string        // DB_PATH: path to aifstudio.db (default /app/data/db/aifstudio.db)
+	StoragePath   string        // STORAGE_PATH: local blob root (default /app/data/storage)
+	SessionMaxAge time.Duration // SESSION_MAX_AGE: session cookie lifetime (default 720h = 30 days)
+
+	// SourceSignedURLTTL is retained for handler compatibility — value is hardcoded (no env var).
+	SourceSignedURLTTL time.Duration
 
 	IFDBBaseURL             string
 	IFDBUserAgent           string
@@ -42,7 +43,6 @@ type Config struct {
 	SaveTimeoutMs          int           // SAVE_TIMEOUT_MS: max time to wait for save
 	RestoreTimeoutMs       int           // RESTORE_TIMEOUT_MS: max time to wait for restore
 	ShutdownDrainTimeout   time.Duration // SHUTDOWN_DRAIN_TIMEOUT: budget for SIGTERM save drain (default 8s; Cloud Run v2 grace period is hardcoded 10s)
-	UserCookieMaxAge       time.Duration // USER_COOKIE_MAX_AGE: Max-Age for sc_user cookie
 	HistoryDefaultLimit    int           // HISTORY_DEFAULT_LIMIT: default limit for by-user query
 	AbandonedPendingTTL    time.Duration // ABANDONED_PENDING_TTL: age at which orphaned pending runs are swept
 	AbandonedSweepInterval time.Duration // ABANDONED_SWEEP_INTERVAL: cadence of the orphan sweep
@@ -65,16 +65,13 @@ func Load() (*Config, error) {
 	port := getEnvOrDefault("PORT", "8080")
 	version := getEnvOrDefault("APP_VERSION", "dev")
 	env := getEnvOrDefault("ENVIRONMENT", "local")
-	projectID := os.Getenv("GCP_PROJECT_ID")
-	firestoreDB := getEnvOrDefault("FIRESTORE_DATABASE_NAME", "storycloud")
-	gcsBucket := os.Getenv("GCS_BUCKET")
-	sourceSignedURLTTL, err := parseDuration("SOURCE_SIGNED_URL_TTL", "15m")
+
+	dbPath := getEnvOrDefault("DB_PATH", "/app/data/db/aifstudio.db")
+	storagePath := getEnvOrDefault("STORAGE_PATH", "/app/data/storage")
+	sessionMaxAge, err := parseDuration("SESSION_MAX_AGE", "720h")
 	if err != nil {
 		return nil, err
 	}
-
-	firebaseWebAPIKey := os.Getenv("FIREBASE_WEB_API_KEY")
-	firebaseAuthDomain := os.Getenv("FIREBASE_AUTH_DOMAIN")
 
 	ifdbBaseURL := getEnvOrDefault("IFDB_BASE_URL", "https://ifdb.org")
 	ifdbUserAgent := getEnvOrDefault("IFDB_USER_AGENT", "StoryCloud/0.1 (contact: vpoluyaktov@gmail.com)")
@@ -144,10 +141,6 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	userCookieMaxAge, err := parseDuration("USER_COOKIE_MAX_AGE", "8760h")
-	if err != nil {
-		return nil, err
-	}
 	historyDefaultLimit, err := parseInt("HISTORY_DEFAULT_LIMIT", 20)
 	if err != nil {
 		return nil, err
@@ -190,16 +183,14 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		Port:                  port,
-		Version:               version,
-		Environment:           env,
-		ProjectID:             projectID,
-		FirestoreDatabaseName: firestoreDB,
-		GCSBucket:          gcsBucket,
-		SourceSignedURLTTL: sourceSignedURLTTL,
+		Port:        port,
+		Version:     version,
+		Environment: env,
 
-		FirebaseWebAPIKey:  firebaseWebAPIKey,
-		FirebaseAuthDomain: firebaseAuthDomain,
+		DBPath:             dbPath,
+		StoragePath:        storagePath,
+		SessionMaxAge:      sessionMaxAge,
+		SourceSignedURLTTL: 15 * time.Minute,
 
 		IFDBBaseURL:             ifdbBaseURL,
 		IFDBUserAgent:           ifdbUserAgent,
@@ -222,7 +213,6 @@ func Load() (*Config, error) {
 		SaveTimeoutMs:          saveTimeoutMs,
 		RestoreTimeoutMs:       restoreTimeoutMs,
 		ShutdownDrainTimeout:   shutdownDrainTimeout,
-		UserCookieMaxAge:       userCookieMaxAge,
 		HistoryDefaultLimit:    historyDefaultLimit,
 		AbandonedPendingTTL:    abandonedPendingTTL,
 		AbandonedSweepInterval: abandonedSweepInterval,

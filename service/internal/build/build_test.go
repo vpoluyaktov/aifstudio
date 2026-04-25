@@ -6,11 +6,14 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"storycloud/internal/auth"
 	"storycloud/internal/build"
 	"storycloud/internal/store"
 )
@@ -20,6 +23,7 @@ import (
 // ─────────────────────────────────────────────────────────────────────────────
 
 type mockStore struct {
+	mu       sync.Mutex
 	builds   map[string]*store.Build
 	projects map[string]*store.Project
 }
@@ -31,10 +35,18 @@ func newMockStore() *mockStore {
 	}
 }
 
-func (m *mockStore) CreateBuild(_ context.Context, b *store.Build) error      { m.builds[b.ID] = b; return nil }
-func (m *mockStore) GetBuild(_ context.Context, id string) (*store.Build, error) { return m.builds[id], nil }
-func (m *mockStore) UpdateBuild(_ context.Context, b *store.Build) error      { m.builds[b.ID] = b; return nil }
+func (m *mockStore) CreateBuild(_ context.Context, b *store.Build) error {
+	m.mu.Lock(); defer m.mu.Unlock(); m.builds[b.ID] = b; return nil
+}
+func (m *mockStore) GetBuild(_ context.Context, id string) (*store.Build, error) {
+	m.mu.Lock(); defer m.mu.Unlock(); return m.builds[id], nil
+}
+func (m *mockStore) UpdateBuild(_ context.Context, b *store.Build) error {
+	m.mu.Lock(); defer m.mu.Unlock(); m.builds[b.ID] = b; return nil
+}
 func (m *mockStore) ListBuildsByProject(_ context.Context, pid string, lim int) ([]*store.Build, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	var out []*store.Build
 	for _, b := range m.builds {
 		if b.ProjectID == pid {
@@ -104,7 +116,22 @@ func (m *mockStore) GetAITurnAfterSource(_ context.Context, _, _ string) (string
 func (m *mockStore) ListRunsByProject(_ context.Context, _ string, _ int) ([]*store.Run, error) { return nil, nil }
 func (m *mockStore) DeleteRunsForProject(_ context.Context, _ string) (int, error)              { return 0, nil }
 func (m *mockStore) DeleteProject(_ context.Context, _ string) error                            { return nil }
-func (m *mockStore) Close() error                                                               { return nil }
+func (m *mockStore) Close() error { return nil }
+
+// Auth stubs — satisfy store.Store after auth methods were added to the interface.
+func (m *mockStore) CreateUser(_ context.Context, _ *auth.User, _ string) error          { return nil }
+func (m *mockStore) GetUserByEmail(_ context.Context, _ string) (*auth.User, string, error) {
+	return nil, "", nil
+}
+func (m *mockStore) GetUserByID(_ context.Context, _ string) (*auth.User, error) { return nil, nil }
+func (m *mockStore) CreateSession(_ context.Context, _ *auth.Session) error       { return nil }
+func (m *mockStore) GetSession(_ context.Context, _ string) (*auth.Session, error) {
+	return nil, nil
+}
+func (m *mockStore) DeleteSession(_ context.Context, _ string) error              { return nil }
+func (m *mockStore) DeleteExpiredSessions(_ context.Context, _ time.Time) (int, error) {
+	return 0, nil
+}
 
 var _ store.Store = (*mockStore)(nil)
 
@@ -118,6 +145,9 @@ func newTestManager(t *testing.T) *build.Manager {
 // ─────────────────────────────────────────────────────────────────────────────
 
 func TestConcurrentBuildRejected409(t *testing.T) {
+	if _, err := exec.LookPath("inform7"); err != nil {
+		t.Skip("inform7 not found on PATH — skipping build integration test")
+	}
 	mgr := newTestManager(t)
 	ctx := context.Background()
 
@@ -153,6 +183,9 @@ func TestConcurrentBuildRejected409(t *testing.T) {
 }
 
 func TestBuildForDifferentProjectAllowed(t *testing.T) {
+	if _, err := exec.LookPath("inform7"); err != nil {
+		t.Skip("inform7 not found on PATH — skipping build integration test")
+	}
 	mgr := newTestManager(t)
 	ctx := context.Background()
 
@@ -252,6 +285,9 @@ func TestBuildStatusConstants(t *testing.T) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 func TestActiveBuildIDTracking(t *testing.T) {
+	if _, err := exec.LookPath("inform7"); err != nil {
+		t.Skip("inform7 not found on PATH — skipping build integration test")
+	}
 	mgr := newTestManager(t)
 	ctx := context.Background()
 

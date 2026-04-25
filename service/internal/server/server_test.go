@@ -75,21 +75,37 @@ func (m *mockStore) GetAITurnAfterSource(_ context.Context, _, _ string) (string
 }
 func (m *mockStore) Close() error { return nil }
 
+// Auth stubs — satisfy store.Store after the auth methods were added to the interface.
+func (m *mockStore) CreateUser(_ context.Context, _ *auth.User, _ string) error {
+	return nil
+}
+func (m *mockStore) GetUserByEmail(_ context.Context, _ string) (*auth.User, string, error) {
+	return nil, "", nil
+}
+func (m *mockStore) GetUserByID(_ context.Context, _ string) (*auth.User, error) {
+	return nil, nil
+}
+func (m *mockStore) CreateSession(_ context.Context, _ *auth.Session) error { return nil }
+func (m *mockStore) GetSession(_ context.Context, _ string) (*auth.Session, error) {
+	return nil, nil
+}
+func (m *mockStore) DeleteSession(_ context.Context, _ string) error { return nil }
+func (m *mockStore) DeleteExpiredSessions(_ context.Context, _ time.Time) (int, error) {
+	return 0, nil
+}
+
 var _ store.Store = (*mockStore)(nil)
 
 func newTestServer() *Server {
 	cfg := &config.Config{
-		Port:             "8080",
-		Version:          "1.0.0",
-		Environment:      "test",
-		RunSessionMax:    30 * time.Minute,
-		RunIdleTimeout:   10 * time.Minute,
-		UserCookieMaxAge: 8760 * time.Hour,
+		Port:                "8080",
+		Version:             "1.0.0",
+		Environment:         "test",
+		RunSessionMax:       30 * time.Minute,
+		RunIdleTimeout:      10 * time.Minute,
 		HistoryDefaultLimit: 20,
 	}
-	// Use empty projectID → local dev mode (no Firebase calls).
-	a, _ := auth.NewVerifier(context.Background(), "")
-	return New(cfg, &mockStore{}, nil, nil, nil, a)
+	return New(cfg, &mockStore{}, nil, nil, nil, auth.NewLocalDevVerifier())
 }
 
 // ── Health ───────────────────────────────────────────────────────────────────

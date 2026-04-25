@@ -62,18 +62,6 @@ func newTSWithMockAuthAndRunner(t *testing.T, ms store.Store, mv *auth.MockVerif
 	return ts
 }
 
-// newTSWithFirebaseConfig creates a test server with MockVerifier and Firebase
-// config fields set so /api/config returns 200 instead of 503.
-func newTSWithFirebaseConfig(t *testing.T, ms store.Store, mv *auth.MockVerifier) *httptest.Server {
-	t.Helper()
-	cfg := testConfig()
-	cfg.FirebaseWebAPIKey = "test-web-api-key-for-unit-tests"
-	cfg.ProjectID = "test-project-id"
-	cfg.FirebaseAuthDomain = "test-project-id.firebaseapp.com"
-	srv := server.New(cfg, ms, nil, nil, nil, mv)
-	return httptest.NewServer(srv.SetupRoutes())
-}
-
 // userA / userB are fixed test users for ownership tests.
 var (
 	userA = &auth.User{UID: "firebase-uid-user-a-test", Email: "a@example.com"}
@@ -131,8 +119,6 @@ func TestFirebaseAuthAllowList(t *testing.T) {
 		{"GET", "/health", 200, 0},
 		{"GET", "/login", 200, 0},
 		{"GET", "/register", 200, 0},
-		// /api/config is allowlisted but returns 503 (no Firebase env vars in testConfig).
-		{"GET", "/api/config", 503, 0},
 		// /static/* — allowlisted; file exists → 200.
 		{"GET", "/static/app.css", 200, 0},
 		{"GET", "/static/app.js", 200, 0},
@@ -477,178 +463,10 @@ func TestOwnershipAllowedForOwner(t *testing.T) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. /api/config shape tests (§22.6.1)
+// 4. /api/config — endpoint removed in SQLite replatform
 // ─────────────────────────────────────────────────────────────────────────────
-
-// TestConfigEndpointShape verifies the 200 response body when Firebase is
-// configured: must include firebase.{apiKey, authDomain, projectId}, plus
-// environment and version top-level fields.
-func TestConfigEndpointShape(t *testing.T) {
-	mv := auth.NewMockVerifier()
-	ms := newMockStore()
-	ts := newTSWithFirebaseConfig(t, ms, mv)
-	defer ts.Close()
-
-	resp, err := http.Get(ts.URL + "/api/config")
-	if err != nil {
-		t.Fatalf("GET /api/config: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d; want 200\nbody: %s", resp.StatusCode, b)
-	}
-
-	ct := resp.Header.Get("Content-Type")
-	if !strings.HasPrefix(ct, "application/json") {
-		t.Errorf("Content-Type = %q; want application/json", ct)
-	}
-
-	// Verify Cache-Control is set (§22.6.1 — "public, max-age=300").
-	cc := resp.Header.Get("Cache-Control")
-	if !strings.Contains(cc, "max-age=300") {
-		t.Errorf("Cache-Control = %q; want max-age=300 present", cc)
-	}
-
-	var body struct {
-		Firebase struct {
-			APIKey     string `json:"apiKey"`
-			AuthDomain string `json:"authDomain"`
-			ProjectID  string `json:"projectId"`
-		} `json:"firebase"`
-		Environment string `json:"environment"`
-		Version     string `json:"version"`
-	}
-	data, _ := io.ReadAll(resp.Body)
-	if err := json.Unmarshal(data, &body); err != nil {
-		t.Fatalf("decode /api/config: %v\nbody: %s", err, data)
-	}
-
-	if body.Firebase.APIKey == "" {
-		t.Errorf("firebase.apiKey is empty\nbody: %s", data)
-	}
-	if body.Firebase.AuthDomain == "" {
-		t.Errorf("firebase.authDomain is empty\nbody: %s", data)
-	}
-	if body.Firebase.ProjectID == "" {
-		t.Errorf("firebase.projectId is empty\nbody: %s", data)
-	}
-	if body.Environment == "" {
-		t.Errorf("environment is empty\nbody: %s", data)
-	}
-	if body.Version == "" {
-		t.Errorf("version is empty\nbody: %s", data)
-	}
-}
-
-// TestConfigEndpointAuthDisabledWhenNoAPIKey verifies that when FIREBASE_WEB_API_KEY
-// (or GCP_PROJECT_ID) is not set, /api/config returns 503 with auth_disabled error.
-func TestConfigEndpointAuthDisabledWhenNoAPIKey(t *testing.T) {
-	mv := auth.NewMockVerifier()
-	ms := newMockStore()
-	// testConfig() has no Firebase fields set → handler returns 503.
-	ts := newTSWithMockAuth(t, ms, mv)
-	defer ts.Close()
-
-	resp, err := http.Get(ts.URL + "/api/config")
-	if err != nil {
-		t.Fatalf("GET /api/config: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusServiceUnavailable {
-		b, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d; want 503 when FirebaseWebAPIKey not set\nbody: %s",
-			resp.StatusCode, b)
-	}
-
-	var body struct {
-		Error string `json:"error"`
-		Code  string `json:"code"`
-	}
-	data, _ := io.ReadAll(resp.Body)
-	if err := json.Unmarshal(data, &body); err != nil {
-		t.Fatalf("decode 503 body: %v\nbody: %s", err, data)
-	}
-	if body.Error != "auth_disabled" {
-		t.Errorf("error = %q; want auth_disabled\nbody: %s", body.Error, data)
-	}
-	if body.Code != "auth_disabled" {
-		t.Errorf("code = %q; want auth_disabled\nbody: %s", body.Code, data)
-	}
-}
-
-// TestConfigEndpointNoAuthRequired verifies that /api/config is accessible
-// without an Authorization header (MockVerifier has no tokens registered, so
-// any authenticated request would fail). This confirms the allow-list is wired.
-func TestConfigEndpointNoAuthRequired(t *testing.T) {
-	mv := auth.NewMockVerifier() // no tokens → auth always fails
-	ms := newMockStore()
-	ts := newTSWithMockAuth(t, ms, mv)
-	defer ts.Close()
-
-	// Request with no Authorization header to a server that would reject all tokens.
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/config", nil)
-	// Deliberately do NOT set Authorization header.
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET /api/config (no auth): %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Must NOT be 401 (auth_required). Any other status from the handler is fine.
-	if resp.StatusCode == http.StatusUnauthorized {
-		b, _ := io.ReadAll(resp.Body)
-		t.Errorf("GET /api/config returned 401 — allow-list not working\nbody: %s", b)
-	}
-}
-
-// TestConfigEndpointAuthDomainDefaulted verifies that when FIREBASE_AUTH_DOMAIN
-// is not set but the other Firebase fields are, authDomain defaults to
-// {projectId}.firebaseapp.com (§22.6.1).
-func TestConfigEndpointAuthDomainDefaulted(t *testing.T) {
-	mv := auth.NewMockVerifier()
-	ms := newMockStore()
-
-	cfg := testConfig()
-	cfg.FirebaseWebAPIKey = "AIzaSyTest12345"
-	cfg.ProjectID = "my-test-project"
-	// FirebaseAuthDomain intentionally left empty → must be defaulted server-side.
-	srv := server.New(cfg, ms, nil, nil, nil, mv)
-	ts := httptest.NewServer(srv.SetupRoutes())
-	defer ts.Close()
-
-	resp, err := http.Get(ts.URL + "/api/config")
-	if err != nil {
-		t.Fatalf("GET /api/config: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d; want 200\nbody: %s", resp.StatusCode, b)
-	}
-
-	var body struct {
-		Firebase struct {
-			AuthDomain string `json:"authDomain"`
-			ProjectID  string `json:"projectId"`
-		} `json:"firebase"`
-	}
-	data, _ := io.ReadAll(resp.Body)
-	if err := json.Unmarshal(data, &body); err != nil {
-		t.Fatalf("decode: %v\nbody: %s", err, data)
-	}
-
-	want := "my-test-project.firebaseapp.com"
-	if body.Firebase.AuthDomain != want {
-		t.Errorf("authDomain = %q; want %q (defaulted from projectId)", body.Firebase.AuthDomain, want)
-	}
-	if body.Firebase.ProjectID != "my-test-project" {
-		t.Errorf("projectId = %q; want my-test-project", body.Firebase.ProjectID)
-	}
-}
+// The Firebase SDK config endpoint (/api/config) was removed when Firebase Auth
+// was replaced with local session auth. These tests are intentionally omitted.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. No sc_user cookie tests (§22.4.1)
@@ -963,11 +781,12 @@ func TestAllowListEdgeCases(t *testing.T) {
 		{"/healthz", true},    // not /api/ → passes through
 		{"/static", true},     // not /api/ → passes through
 
-		// /api/config — the one API path that bypasses auth.
-		{"/api/config", true},
+		// /api/config endpoint was removed (Firebase config no longer served).
+		// It is no longer in the allow-list → auth required → 401.
+		{"/api/config", false},
 
 		// All other /api/ paths → auth required (MockVerifier has no tokens → 401).
-		{"/api/config/extra", false}, // extra segment after /api/config → blocked
+		{"/api/config/extra", false}, // extra segment → blocked
 		{"/api/runs", false},
 		{"/api/ifdb/search", false},
 		{"/api/projects", false},

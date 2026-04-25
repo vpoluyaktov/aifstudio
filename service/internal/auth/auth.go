@@ -1,103 +1,211 @@
-// Package auth provides Firebase ID token verification middleware.
+// Package auth provides session-cookie-based authentication for AIFStudio.
+// The bcrypt password hash is stored in SQLite; session tokens are 32-byte
+// random values base64url-encoded to 43 characters.
 package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
-	"strings"
+	"time"
 
-	firebase "firebase.google.com/go/v4"
-	firebaseauth "firebase.google.com/go/v4/auth"
-	"google.golang.org/api/option"
+	"golang.org/x/crypto/bcrypt"
 )
 
-// User represents a verified Firebase user.
+// ErrEmailTaken is returned by AuthStore.CreateUser when the email is already registered.
+var ErrEmailTaken = errors.New("email already registered")
+
+// User represents an authenticated AIFStudio user.
 type User struct {
-	UID   string
-	Email string
-	Name  string
+	UID       string    // "u-<ULID>"
+	Email     string    // lowercased
+	Name      string    // display name
+	CreatedAt time.Time
+}
+
+// Session represents an active session stored in SQLite.
+type Session struct {
+	ID        string    // 43-char base64url token (32 random bytes)
+	UserID    string    // FK → users.id
+	CreatedAt time.Time
+	ExpiresAt time.Time
 }
 
 type contextKey struct{}
 
-// WithUser stores the authenticated user in ctx.
+// WithUser stores u in ctx.
 func WithUser(ctx context.Context, u *User) context.Context {
 	return context.WithValue(ctx, contextKey{}, u)
 }
 
-// UserFromContext retrieves the authenticated user from ctx, or nil.
+// UserFromContext returns the user stored in ctx, or nil if none.
 func UserFromContext(ctx context.Context) *User {
 	u, _ := ctx.Value(contextKey{}).(*User)
 	return u
 }
 
-// Verifier wraps the Firebase Admin SDK auth client.
-type Verifier struct {
-	client *firebaseauth.Client
-	// localMode means GCP_PROJECT_ID was not set; skip real verification.
-	localMode bool
+// AuthStore is the subset of store.Store that SessionAuth requires.
+// Defined here (not in store) to avoid a circular import: store imports auth
+// for *auth.User/*auth.Session types; auth must not import store.
+type AuthStore interface {
+	CreateUser(ctx context.Context, u *User, passwordHash string) error
+	GetUserByEmail(ctx context.Context, email string) (*User, string, error)
+	GetUserByID(ctx context.Context, uid string) (*User, error)
+	CreateSession(ctx context.Context, s *Session) error
+	GetSession(ctx context.Context, sessionID string) (*Session, error)
+	DeleteSession(ctx context.Context, sessionID string) error
+	DeleteExpiredSessions(ctx context.Context, now time.Time) (int, error)
 }
 
-// NewVerifier creates a Verifier. If projectID is empty, local dev mode is
-// activated: FromRequest returns a fixed "local-dev" user.
-func NewVerifier(ctx context.Context, projectID string, opts ...option.ClientOption) (*Verifier, error) {
-	if projectID == "" {
-		return &Verifier{localMode: true}, nil
-	}
+// SessionAuth implements session-cookie authentication.
+// It satisfies VerifierIface so it can be injected into Server the same
+// way MockVerifier is injected in tests.
+type SessionAuth struct {
+	store  AuthStore
+	maxAge time.Duration
+}
 
-	app, err := firebase.NewApp(ctx, &firebase.Config{ProjectID: projectID}, opts...)
+// NewSessionAuth creates a SessionAuth backed by st with sessions lasting maxAge.
+func NewSessionAuth(st AuthStore, maxAge time.Duration) *SessionAuth {
+	return &SessionAuth{store: st, maxAge: maxAge}
+}
+
+// FromRequest reads the "aifstudio_session" cookie and returns the authenticated
+// user. Implements VerifierIface.
+func (a *SessionAuth) FromRequest(ctx context.Context, r *http.Request) (*User, error) {
+	cookie, err := r.Cookie("aifstudio_session")
 	if err != nil {
-		return nil, fmt.Errorf("firebase app: %w", err)
+		return nil, fmt.Errorf("no session cookie")
 	}
+	return a.verifySessionID(ctx, cookie.Value)
+}
 
-	client, err := app.Auth(ctx)
+// VerifyToken is retained for VerifierIface compatibility. Session auth does not
+// use bearer tokens; always returns an error.
+func (a *SessionAuth) VerifyToken(_ context.Context, _ string) (*User, error) {
+	return nil, fmt.Errorf("bearer token auth not supported; use session cookie")
+}
+
+func (a *SessionAuth) verifySessionID(ctx context.Context, sessionID string) (*User, error) {
+	sess, err := a.store.GetSession(ctx, sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("firebase auth client: %w", err)
+		return nil, fmt.Errorf("get session: %w", err)
 	}
-
-	return &Verifier{client: client}, nil
-}
-
-// FromRequest extracts and verifies the Firebase ID token from the
-// Authorization: Bearer header. Returns an error if the token is absent or
-// invalid. In local dev mode always returns a fixed user.
-func (v *Verifier) FromRequest(ctx context.Context, r *http.Request) (*User, error) {
-	if v.localMode {
-		return &User{UID: "local-dev", Email: "dev@local", Name: "Local Dev"}, nil
+	if sess == nil {
+		return nil, fmt.Errorf("session not found or expired")
 	}
-
-	bearer := r.Header.Get("Authorization")
-	token, ok := strings.CutPrefix(bearer, "Bearer ")
-	if !ok || token == "" {
-		return nil, fmt.Errorf("missing or malformed Authorization header")
+	if time.Now().After(sess.ExpiresAt) {
+		go func() { _ = a.store.DeleteSession(context.Background(), sess.ID) }() //nolint:errcheck
+		return nil, fmt.Errorf("session expired")
 	}
-
-	return v.verify(ctx, token)
-}
-
-// VerifyToken verifies a raw ID token string directly. Used when the token is
-// passed via query parameter rather than the Authorization header (e.g. for the
-// sendBeacon suspend path which cannot set custom headers).
-func (v *Verifier) VerifyToken(ctx context.Context, idToken string) (*User, error) {
-	if v.localMode {
-		return &User{UID: "local-dev", Email: "dev@local", Name: "Local Dev"}, nil
-	}
-	return v.verify(ctx, idToken)
-}
-
-func (v *Verifier) verify(ctx context.Context, idToken string) (*User, error) {
-	tok, err := v.client.VerifyIDToken(ctx, idToken)
+	user, err := a.store.GetUserByID(ctx, sess.UserID)
 	if err != nil {
-		return nil, fmt.Errorf("invalid id token: %w", err)
+		return nil, fmt.Errorf("get user: %w", err)
 	}
+	if user == nil {
+		return nil, fmt.Errorf("user not found")
+	}
+	return user, nil
+}
 
-	u := &User{UID: tok.UID}
-	if email, ok := tok.Claims["email"].(string); ok {
-		u.Email = email
+// Login verifies credentials and issues a session cookie.
+// Timing-safe: bcrypt.CompareHashAndPassword runs even when the user does not
+// exist, so no timing oracle leaks whether the email is registered.
+func (a *SessionAuth) Login(ctx context.Context, w http.ResponseWriter, r *http.Request, email, password string) (*User, error) {
+	user, hash, err := a.store.GetUserByEmail(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("lookup user: %w", err)
 	}
-	if name, ok := tok.Claims["name"].(string); ok {
-		u.Name = name
+	// Compare against a valid-looking hash even when user is missing.
+	compareHash := hash
+	if user == nil || compareHash == "" {
+		// A pre-hashed dummy — same cost (12); prevents short-circuit.
+		compareHash = "$2a$12$XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 	}
-	return u, nil
+	if bcrypt.CompareHashAndPassword([]byte(compareHash), []byte(password)) != nil || user == nil {
+		return nil, fmt.Errorf("invalid credentials")
+	}
+	sess, err := a.createSession(ctx, user.UID)
+	if err != nil {
+		return nil, err
+	}
+	setSessionCookie(w, r, sess.ID, a.maxAge)
+	return user, nil
+}
+
+// Register creates a new user account and issues a session cookie.
+// Returns ErrEmailTaken (unwrappable via errors.Is) if the email is taken.
+func (a *SessionAuth) Register(ctx context.Context, w http.ResponseWriter, r *http.Request, email, password, displayName string) (*User, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	if err != nil {
+		return nil, fmt.Errorf("hash password: %w", err)
+	}
+	user := &User{Email: email, Name: displayName}
+	if err := a.store.CreateUser(ctx, user, string(hash)); err != nil {
+		return nil, err // caller checks errors.Is(err, ErrEmailTaken)
+	}
+	sess, err := a.createSession(ctx, user.UID)
+	if err != nil {
+		return nil, err
+	}
+	setSessionCookie(w, r, sess.ID, a.maxAge)
+	return user, nil
+}
+
+// Logout deletes the current session and clears the cookie. Idempotent: missing
+// or unknown session is not an error.
+func (a *SessionAuth) Logout(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie("aifstudio_session"); err == nil {
+		_ = a.store.DeleteSession(ctx, cookie.Value) //nolint:errcheck
+	}
+	clearSessionCookie(w)
+}
+
+func (a *SessionAuth) createSession(ctx context.Context, userID string) (*Session, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return nil, fmt.Errorf("generate session token: %w", err)
+	}
+	id := base64.RawURLEncoding.EncodeToString(b) // 43 chars
+	now := time.Now().UTC()
+	sess := &Session{
+		ID:        id,
+		UserID:    userID,
+		CreatedAt: now,
+		ExpiresAt: now.Add(a.maxAge),
+	}
+	if err := a.store.CreateSession(ctx, sess); err != nil {
+		return nil, fmt.Errorf("insert session: %w", err)
+	}
+	return sess, nil
+}
+
+// setSessionCookie writes the aifstudio_session cookie. Secure is set only when
+// the request is over HTTPS so local dev (http://localhost) still works.
+func setSessionCookie(w http.ResponseWriter, r *http.Request, sessionID string, maxAge time.Duration) {
+	secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+	http.SetCookie(w, &http.Cookie{
+		Name:     "aifstudio_session",
+		Value:    sessionID,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   int(maxAge.Seconds()),
+		Secure:   secure,
+	})
+}
+
+// clearSessionCookie removes the aifstudio_session cookie from the client.
+func clearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "aifstudio_session",
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   -1,
+	})
 }

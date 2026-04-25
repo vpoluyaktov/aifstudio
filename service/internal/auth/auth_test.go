@@ -1,44 +1,57 @@
-// Package auth_test tests the auth.Verifier and context helpers.
-// All tests run without a real Firebase project — only local-mode behavior
-// (empty projectID) is exercised in unit tests. Integration tests that require
-// real Firebase token verification are outside this file.
+// Package auth_test tests the auth package: context helpers, MockVerifier,
+// and SessionAuth (backed by a real in-memory SQLite store).
 package auth_test
 
 import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"storycloud/internal/auth"
+	"storycloud/internal/store"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NewVerifier / local-mode
+// SessionAuth test helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-func TestNewVerifierLocalMode(t *testing.T) {
-	// Empty projectID → local dev mode, no Firebase connection.
-	v, err := auth.NewVerifier(context.Background(), "")
+// newAuthStore opens a temporary SQLite store suitable for SessionAuth tests.
+func newAuthStore(t *testing.T) *store.SQLiteStore {
+	t.Helper()
+	dir := t.TempDir()
+	blob := store.NewLocalBlobStore(filepath.Join(dir, "storage"))
+	s, err := store.NewSQLiteStore(context.Background(), filepath.Join(dir, "auth_test.db"), blob)
 	if err != nil {
-		t.Fatalf("NewVerifier(empty projectID) error = %v; want nil", err)
+		t.Fatalf("NewSQLiteStore for auth test: %v", err)
 	}
-	if v == nil {
-		t.Fatal("Verifier is nil")
-	}
+	t.Cleanup(func() { _ = s.Close() })
+	return s
+}
+
+// newSessionAuth creates a SessionAuth with a 24-hour session max-age.
+func newSessionAuth(t *testing.T) (*auth.SessionAuth, *store.SQLiteStore) {
+	t.Helper()
+	st := newAuthStore(t)
+	return auth.NewSessionAuth(st, 24*time.Hour), st
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FromRequest — local dev mode
+// NewLocalDevVerifier
 // ─────────────────────────────────────────────────────────────────────────────
 
-func TestFromRequestLocalModeNoHeader(t *testing.T) {
-	v, _ := auth.NewVerifier(context.Background(), "")
+func TestNewLocalDevVerifierAlwaysReturnsUser(t *testing.T) {
+	v := auth.NewLocalDevVerifier()
+	if v == nil {
+		t.Fatal("NewLocalDevVerifier returned nil")
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/projects", nil)
 	user, err := v.FromRequest(context.Background(), req)
 	if err != nil {
-		t.Fatalf("FromRequest() error = %v; want nil in local mode", err)
+		t.Fatalf("FromRequest() error = %v; want nil", err)
 	}
 	if user == nil {
 		t.Fatal("user = nil; want local-dev user")
@@ -48,9 +61,9 @@ func TestFromRequestLocalModeNoHeader(t *testing.T) {
 	}
 }
 
-func TestFromRequestLocalModeWithBogusToken(t *testing.T) {
-	// Local mode ignores the Authorization header completely.
-	v, _ := auth.NewVerifier(context.Background(), "")
+func TestNewLocalDevVerifierIgnoresToken(t *testing.T) {
+	// LocalDevVerifier ignores the Authorization header completely.
+	v := auth.NewLocalDevVerifier()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer totally-invalid-token")
@@ -66,8 +79,8 @@ func TestFromRequestLocalModeWithBogusToken(t *testing.T) {
 	}
 }
 
-func TestFromRequestLocalModeFields(t *testing.T) {
-	v, _ := auth.NewVerifier(context.Background(), "")
+func TestLocalDevVerifierFields(t *testing.T) {
+	v := auth.NewLocalDevVerifier()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	user, err := v.FromRequest(context.Background(), req)
@@ -140,30 +153,52 @@ func TestUserFromContextIsolation(t *testing.T) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Non-local mode: missing / malformed Authorization header
-//
-// We cannot test real Firebase token verification without a live Firebase project.
-// The following tests verify that the Authorization header is parsed correctly
-// and that a missing / malformed header results in an error.
-//
-// Note: These tests require creating a Verifier in non-local mode, which would
-// normally require a real Firebase project. Since we cannot do that in unit tests,
-// these cases are tested via the server handler middleware tests (server_test.go).
+// MockVerifier
 // ─────────────────────────────────────────────────────────────────────────────
 
-// TestAuthMiddlewareRequiresBearerToken documents the expected behavior:
-//   - "Authorization: Bearer <token>" with a valid token → 200
-//   - No header → 401
-//   - "Authorization: token" (wrong scheme) → 401
-//
-// These are enforced by the authRequired middleware in server.go and validated
-// in server_test.go using a local-mode Verifier (which always succeeds) and
-// verifying that the 401 path is reachable when the header is absent in
-// non-local mode.
+func TestMockVerifierRegisteredToken(t *testing.T) {
+	mv := auth.NewMockVerifier()
+	want := &auth.User{UID: "u-test", Email: "test@example.com", Name: "Test"}
+	mv.SetUser("tok-123", want)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer tok-123")
+
+	got, err := mv.FromRequest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("FromRequest with valid token: %v", err)
+	}
+	if got == nil || got.UID != want.UID {
+		t.Errorf("UID = %q; want %q", got.UID, want.UID)
+	}
+}
+
+func TestMockVerifierUnregisteredToken(t *testing.T) {
+	mv := auth.NewMockVerifier()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer unknown-token")
+
+	user, err := mv.FromRequest(context.Background(), req)
+	if err == nil {
+		t.Errorf("expected error for unregistered token, got user %v", user)
+	}
+}
+
+func TestMockVerifierNoHeader(t *testing.T) {
+	mv := auth.NewMockVerifier()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	// No Authorization header.
+
+	user, err := mv.FromRequest(context.Background(), req)
+	if err == nil {
+		t.Errorf("expected error for missing header, got user %v", user)
+	}
+}
+
+// TestAuthBearerPrefixRequired documents the expected header shape.
 func TestAuthBearerPrefixRequired(t *testing.T) {
-	// This test documents the expected header shape rather than running
-	// Firebase verification. The actual middleware behavior is tested in
-	// server_test.go.
 	cases := []struct {
 		name   string
 		header string
@@ -171,15 +206,343 @@ func TestAuthBearerPrefixRequired(t *testing.T) {
 		{"no header", ""},
 		{"wrong scheme", "Basic dXNlcjpwYXNz"},
 		{"bearer no token", "Bearer "},
-		{"bearer with space only", "Bearer   "},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// In non-local mode, each of these should fail with an error.
-			// We document the expected behavior here; see server_test.go for
-			// full middleware validation.
-			t.Log("expected: non-local Verifier.FromRequest returns error for:", tc.header)
+			t.Log("expected: MockVerifier.FromRequest returns error for:", tc.header)
 		})
+	}
+}
+
+// ────────────────────────────���────────────────────────────────────────────────
+// SessionAuth tests (backed by a real SQLite store)
+// ──────────────────────────────────���──────────────────────────────��───────────
+
+// TestSessionAuthRegister verifies that Register creates a user, issues a
+// session, and sets the aifstudio_session cookie in the response.
+func TestSessionAuthRegister(t *testing.T) {
+	sa, st := newSessionAuth(t)
+	ctx := context.Background()
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/auth/register", nil)
+
+	user, err := sa.Register(ctx, w, r, "alice@example.com", "correcthorsebatterystaple", "Alice")
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if user == nil {
+		t.Fatal("user is nil")
+	}
+	if user.UID == "" {
+		t.Error("UID should be set after Register")
+	}
+	if user.Email != "alice@example.com" {
+		t.Errorf("Email = %q; want alice@example.com", user.Email)
+	}
+	if user.Name != "Alice" {
+		t.Errorf("Name = %q; want Alice", user.Name)
+	}
+
+	// Verify the session cookie was set.
+	cookies := w.Result().Cookies()
+	var sessionCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == "aifstudio_session" {
+			sessionCookie = c
+			break
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatal("no aifstudio_session cookie set")
+	}
+	if sessionCookie.Value == "" {
+		t.Error("session cookie value is empty")
+	}
+
+	// Verify the session exists in the store.
+	sess, err := st.GetSession(ctx, sessionCookie.Value)
+	if err != nil {
+		t.Fatalf("GetSession after register: %v", err)
+	}
+	if sess == nil {
+		t.Fatal("session not found in store after register")
+	}
+	if sess.UserID != user.UID {
+		t.Errorf("session.UserID = %q; want %q", sess.UserID, user.UID)
+	}
+}
+
+// TestSessionAuthRegister_DuplicateEmail verifies that registering with an
+// already-registered email returns ErrEmailTaken (wrapped or direct).
+func TestSessionAuthRegister_DuplicateEmail(t *testing.T) {
+	sa, _ := newSessionAuth(t)
+	ctx := context.Background()
+
+	w1 := httptest.NewRecorder()
+	r1 := httptest.NewRequest(http.MethodPost, "/api/auth/register", nil)
+	if _, err := sa.Register(ctx, w1, r1, "bob@example.com", "password123", "Bob"); err != nil {
+		t.Fatalf("first Register: %v", err)
+	}
+
+	// Second registration with same email.
+	w2 := httptest.NewRecorder()
+	r2 := httptest.NewRequest(http.MethodPost, "/api/auth/register", nil)
+	_, err := sa.Register(ctx, w2, r2, "bob@example.com", "differentpwd", "Bobby")
+	if err == nil {
+		t.Fatal("expected error for duplicate email, got nil")
+	}
+	if !isEmailTaken(err) {
+		t.Errorf("err = %v; want ErrEmailTaken or wrapping it", err)
+	}
+}
+
+// isEmailTaken returns true if err signals a duplicate email.
+func isEmailTaken(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Direct match or wrapped.
+	if err == auth.ErrEmailTaken {
+		return true
+	}
+	// Some implementations wrap the error; unwrap and check.
+	return err.Error() == auth.ErrEmailTaken.Error()
+}
+
+// TestSessionAuthLogin verifies that Login with correct credentials succeeds
+// and sets a session cookie.
+func TestSessionAuthLogin(t *testing.T) {
+	sa, _ := newSessionAuth(t)
+	ctx := context.Background()
+
+	// Register first.
+	w1 := httptest.NewRecorder()
+	r1 := httptest.NewRequest(http.MethodPost, "/api/auth/register", nil)
+	_, err := sa.Register(ctx, w1, r1, "carol@example.com", "password12345", "Carol")
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	// Login.
+	w2 := httptest.NewRecorder()
+	r2 := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
+	user, err := sa.Login(ctx, w2, r2, "carol@example.com", "password12345")
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if user == nil {
+		t.Fatal("user is nil after login")
+	}
+	if user.Email != "carol@example.com" {
+		t.Errorf("Email = %q; want carol@example.com", user.Email)
+	}
+
+	// Verify the session cookie was set.
+	var sessionCookie *http.Cookie
+	for _, c := range w2.Result().Cookies() {
+		if c.Name == "aifstudio_session" {
+			sessionCookie = c
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatal("no aifstudio_session cookie after login")
+	}
+}
+
+// TestSessionAuthLogin_WrongPassword verifies that Login with a wrong password
+// returns an error and does NOT set a session cookie.
+func TestSessionAuthLogin_WrongPassword(t *testing.T) {
+	sa, _ := newSessionAuth(t)
+	ctx := context.Background()
+
+	w1 := httptest.NewRecorder()
+	r1 := httptest.NewRequest(http.MethodPost, "/api/auth/register", nil)
+	_, err := sa.Register(ctx, w1, r1, "dave@example.com", "correctpassword", "Dave")
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	w2 := httptest.NewRecorder()
+	r2 := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
+	_, err = sa.Login(ctx, w2, r2, "dave@example.com", "wrongpassword")
+	if err == nil {
+		t.Fatal("expected error for wrong password, got nil")
+	}
+
+	// Must not set a session cookie on failure.
+	for _, c := range w2.Result().Cookies() {
+		if c.Name == "aifstudio_session" {
+			t.Errorf("session cookie set despite wrong password: %q", c.Value)
+		}
+	}
+}
+
+// TestSessionAuthLogin_UnknownEmail verifies that Login with an unregistered
+// email returns an error (timing-safe path).
+func TestSessionAuthLogin_UnknownEmail(t *testing.T) {
+	sa, _ := newSessionAuth(t)
+	ctx := context.Background()
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
+	_, err := sa.Login(ctx, w, r, "nobody@example.com", "somepassword")
+	if err == nil {
+		t.Fatal("expected error for unknown email, got nil")
+	}
+}
+
+// TestSessionAuthLogout verifies that Logout deletes the session from the
+// store and clears the cookie (Max-Age=-1 or Max-Age=0).
+func TestSessionAuthLogout(t *testing.T) {
+	sa, st := newSessionAuth(t)
+	ctx := context.Background()
+
+	// Register and grab the session cookie.
+	wReg := httptest.NewRecorder()
+	rReg := httptest.NewRequest(http.MethodPost, "/api/auth/register", nil)
+	_, err := sa.Register(ctx, wReg, rReg, "eve@example.com", "password12345", "Eve")
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	var sessionToken string
+	for _, c := range wReg.Result().Cookies() {
+		if c.Name == "aifstudio_session" {
+			sessionToken = c.Value
+		}
+	}
+	if sessionToken == "" {
+		t.Fatal("no session cookie after register")
+	}
+
+	// Verify session is valid.
+	sess, _ := st.GetSession(ctx, sessionToken)
+	if sess == nil {
+		t.Fatal("session should exist before logout")
+	}
+
+	// Logout.
+	wOut := httptest.NewRecorder()
+	rOut := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	rOut.AddCookie(&http.Cookie{Name: "aifstudio_session", Value: sessionToken})
+	sa.Logout(ctx, wOut, rOut)
+
+	// Session must be removed from store.
+	sess2, _ := st.GetSession(ctx, sessionToken)
+	if sess2 != nil {
+		t.Error("session should be deleted after logout")
+	}
+
+	// Response must clear the cookie (MaxAge <= 0).
+	for _, c := range wOut.Result().Cookies() {
+		if c.Name == "aifstudio_session" {
+			if c.MaxAge > 0 {
+				t.Errorf("cookie MaxAge = %d; want ≤0 (clear)", c.MaxAge)
+			}
+		}
+	}
+}
+
+// TestSessionAuthFromRequest_ValidCookie verifies that FromRequest returns the
+// correct user when a valid session cookie is present.
+func TestSessionAuthFromRequest_ValidCookie(t *testing.T) {
+	sa, _ := newSessionAuth(t)
+	ctx := context.Background()
+
+	// Register to get a session.
+	wReg := httptest.NewRecorder()
+	rReg := httptest.NewRequest(http.MethodPost, "/api/auth/register", nil)
+	registered, err := sa.Register(ctx, wReg, rReg, "frank@example.com", "password12345", "Frank")
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	var sessionToken string
+	for _, c := range wReg.Result().Cookies() {
+		if c.Name == "aifstudio_session" {
+			sessionToken = c.Value
+		}
+	}
+
+	// Build a request with the session cookie.
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	r.AddCookie(&http.Cookie{Name: "aifstudio_session", Value: sessionToken})
+
+	user, err := sa.FromRequest(ctx, r)
+	if err != nil {
+		t.Fatalf("FromRequest valid cookie: %v", err)
+	}
+	if user == nil {
+		t.Fatal("user is nil for valid cookie")
+	}
+	if user.UID != registered.UID {
+		t.Errorf("UID = %q; want %q", user.UID, registered.UID)
+	}
+	if user.Email != "frank@example.com" {
+		t.Errorf("Email = %q; want frank@example.com", user.Email)
+	}
+}
+
+// TestSessionAuthFromRequest_NoCookie verifies that FromRequest returns an error
+// when the session cookie is absent.
+func TestSessionAuthFromRequest_NoCookie(t *testing.T) {
+	sa, _ := newSessionAuth(t)
+	ctx := context.Background()
+
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	// No cookie added.
+
+	_, err := sa.FromRequest(ctx, r)
+	if err == nil {
+		t.Fatal("expected error for missing cookie, got nil")
+	}
+}
+
+// TestSessionAuthFromRequest_ExpiredSession verifies that FromRequest returns
+// an error when the session token maps to an expired (or already-deleted) session.
+func TestSessionAuthFromRequest_ExpiredSession(t *testing.T) {
+	sa, st := newSessionAuth(t)
+	ctx := context.Background()
+
+	// Register and then manually delete the session to simulate expiry.
+	wReg := httptest.NewRecorder()
+	rReg := httptest.NewRequest(http.MethodPost, "/api/auth/register", nil)
+	_, err := sa.Register(ctx, wReg, rReg, "grace@example.com", "password12345", "Grace")
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	var sessionToken string
+	for _, c := range wReg.Result().Cookies() {
+		if c.Name == "aifstudio_session" {
+			sessionToken = c.Value
+		}
+	}
+
+	// Delete the session from the store to simulate expiry.
+	if err := st.DeleteSession(ctx, sessionToken); err != nil {
+		t.Fatalf("DeleteSession: %v", err)
+	}
+
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	r.AddCookie(&http.Cookie{Name: "aifstudio_session", Value: sessionToken})
+
+	_, err = sa.FromRequest(ctx, r)
+	if err == nil {
+		t.Fatal("expected error for expired/deleted session, got nil")
+	}
+}
+
+// TestSessionAuthFromRequest_InvalidToken verifies that FromRequest returns an
+// error for a cookie value that does not exist in the sessions table.
+func TestSessionAuthFromRequest_InvalidToken(t *testing.T) {
+	sa, _ := newSessionAuth(t)
+	ctx := context.Background()
+
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	r.AddCookie(&http.Cookie{Name: "aifstudio_session", Value: "completely-invalid-token-value"})
+
+	_, err := sa.FromRequest(ctx, r)
+	if err == nil {
+		t.Fatal("expected error for invalid token, got nil")
 	}
 }

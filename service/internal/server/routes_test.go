@@ -431,6 +431,21 @@ func (m *mockStore) GetAITurnAfterSource(_ context.Context, projectID, turnID st
 }
 func (m *mockStore) Close() error { return nil }
 
+// Auth stubs — satisfy store.Store interface after auth methods were added.
+func (m *mockStore) CreateUser(_ context.Context, _ *auth.User, _ string) error { return nil }
+func (m *mockStore) GetUserByEmail(_ context.Context, _ string) (*auth.User, string, error) {
+	return nil, "", nil
+}
+func (m *mockStore) GetUserByID(_ context.Context, _ string) (*auth.User, error) { return nil, nil }
+func (m *mockStore) CreateSession(_ context.Context, _ *auth.Session) error       { return nil }
+func (m *mockStore) GetSession(_ context.Context, _ string) (*auth.Session, error) {
+	return nil, nil
+}
+func (m *mockStore) DeleteSession(_ context.Context, _ string) error              { return nil }
+func (m *mockStore) DeleteExpiredSessions(_ context.Context, _ time.Time) (int, error) {
+	return 0, nil
+}
+
 var _ store.Store = (*mockStore)(nil)
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -449,10 +464,8 @@ func testConfig() *config.Config {
 func newTS(t *testing.T, ms store.Store) *httptest.Server {
 	t.Helper()
 	cfg := testConfig()
-	verifier, err := auth.NewVerifier(context.Background(), "")
-	if err != nil {
-		t.Fatalf("auth.NewVerifier: %v", err)
-	}
+	// NewLocalDevVerifier always returns "local-dev" user — no database calls.
+	verifier := auth.NewLocalDevVerifier()
 	// nil for ifdb.Client, runner.Manager, build.Manager — only inject what each test needs.
 	srv := server.New(cfg, ms, nil, nil, nil, verifier)
 	return httptest.NewServer(srv.SetupRoutes())
@@ -595,7 +608,7 @@ func TestHealthOK(t *testing.T) {
 func TestHealthWithNilStore(t *testing.T) {
 	// ARCHITECTURE.md §3.1: health must not touch store, GCS, or IFDB.
 	cfg := testConfig()
-	verifier, _ := auth.NewVerifier(context.Background(), "")
+	verifier := auth.NewLocalDevVerifier()
 	srv := server.New(cfg, nil, nil, nil, nil, verifier)
 	ts := httptest.NewServer(srv.SetupRoutes())
 	defer ts.Close()
@@ -1197,10 +1210,7 @@ var _ server.BuilderService = (*mockBuilder)(nil)
 func newTSWithBuilder(t *testing.T, ms store.Store, builder server.BuilderService) *httptest.Server {
 	t.Helper()
 	cfg := testConfig()
-	verifier, err := auth.NewVerifier(context.Background(), "")
-	if err != nil {
-		t.Fatalf("auth.NewVerifier: %v", err)
-	}
+	verifier := auth.NewLocalDevVerifier()
 	srv := server.New(cfg, ms, nil, nil, builder, verifier)
 	return httptest.NewServer(srv.SetupRoutes())
 }
@@ -1586,10 +1596,7 @@ func truncate(s string, max int) string {
 func newTSWithIFDB(t *testing.T, ms store.Store, ifdbClient *ifdb.Client) *httptest.Server {
 	t.Helper()
 	cfg := testConfig()
-	verifier, err := auth.NewVerifier(context.Background(), "")
-	if err != nil {
-		t.Fatalf("auth.NewVerifier: %v", err)
-	}
+	verifier := auth.NewLocalDevVerifier()
 	srv := server.New(cfg, ms, ifdbClient, nil, nil, verifier)
 	return httptest.NewServer(srv.SetupRoutes())
 }

@@ -103,11 +103,8 @@ func parseTemplates() *TemplateSet {
 func (s *Server) SetupRoutes() http.Handler {
 	mux := http.NewServeMux()
 
-	// Health — unauthenticated, no Firestore/GCS/IFDB touch.
+	// Health — unauthenticated, no store/IFDB touch.
 	mux.HandleFunc("GET /health", s.handleHealth)
-
-	// Config — unauthenticated; exposes Firebase Web SDK config to the browser.
-	mux.HandleFunc("GET /api/config", s.handleConfig)
 
 	// IFDB proxy — behind auth (§22.4.3).
 	mux.HandleFunc("GET /api/ifdb/search", s.handleIFDBSearch)
@@ -158,7 +155,13 @@ func (s *Server) SetupRoutes() http.Handler {
 	mux.HandleFunc("GET /api/community", s.handleCommunityList)
 	mux.HandleFunc("POST /api/community/{id}/play", s.handleCommunityPlay)
 
-	// Auth pages — unauthenticated (allow-listed in firebaseAuthRequired).
+	// Auth API — allow-listed (register/login bypass auth gate; logout/me require session).
+	mux.HandleFunc("POST /api/auth/register", s.handleAuthRegister)
+	mux.HandleFunc("POST /api/auth/login", s.handleAuthLogin)
+	mux.HandleFunc("POST /api/auth/logout", s.handleAuthLogout)
+	mux.HandleFunc("GET /api/auth/me", s.handleAuthMe)
+
+	// Auth pages — unauthenticated (allow-listed in sessionAuthRequired).
 	mux.HandleFunc("GET /login", s.handlePageLogin)
 	mux.HandleFunc("GET /register", s.handlePageRegister)
 
@@ -186,9 +189,9 @@ func (s *Server) SetupRoutes() http.Handler {
 		http.FileServer(http.FS(staticRoot))))
 
 	// Middleware chain (outermost → innermost):
-	// recover → requestID → logging → cors → maxBody → firebaseAuthRequired → mux
+	// recover → requestID → logging → cors → maxBody → sessionAuthRequired → mux
 	var h http.Handler = mux
-	h = s.firebaseAuthRequired(h)
+	h = s.sessionAuthRequired(h)
 	h = maxBodyMiddleware(h)
 	h = corsMiddleware(h)
 	h = loggingMiddleware(h)

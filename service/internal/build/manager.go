@@ -70,7 +70,10 @@ func (m *Manager) StartBuild(ctx context.Context, b *store.Build, source string)
 		return fmt.Errorf("create build: %w", err)
 	}
 
-	go m.runBuild(b, source)
+	// Copy b before handing to goroutine so the caller cannot observe
+	// mutations made by runBuild (e.g. Status, StartedAt, FinishedAt).
+	buildCopy := *b
+	go m.runBuild(&buildCopy, source)
 	return nil
 }
 

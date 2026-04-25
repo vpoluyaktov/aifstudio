@@ -8,9 +8,8 @@ import (
 
 func clearEnv() {
 	for _, k := range []string{
-		"PORT", "APP_VERSION", "ENVIRONMENT", "GCP_PROJECT_ID",
-		"FIRESTORE_DATABASE_NAME", "GCS_BUCKET",
-		"FIREBASE_WEB_API_KEY", "FIREBASE_AUTH_DOMAIN",
+		"PORT", "APP_VERSION", "ENVIRONMENT",
+		"DB_PATH", "STORAGE_PATH", "SESSION_MAX_AGE",
 		"IFDB_BASE_URL", "IFDB_USER_AGENT", "IFDB_CACHE_TTL",
 		"IFDB_RATE_LIMIT_QPS", "IFDB_RATE_LIMIT_BURST",
 		"IFDB_RATE_LIMIT_PER_IP_QPS", "IFDB_RATE_LIMIT_PER_IP_BURST",
@@ -39,11 +38,11 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Environment != "local" {
 		t.Errorf("Environment: want local, got %s", cfg.Environment)
 	}
-	if cfg.ProjectID != "" {
-		t.Errorf("ProjectID: want empty, got %s", cfg.ProjectID)
+	if cfg.DBPath != "/app/data/db/aifstudio.db" {
+		t.Errorf("DBPath: want /app/data/db/aifstudio.db, got %s", cfg.DBPath)
 	}
-	if cfg.FirestoreDatabaseName != "storycloud" {
-		t.Errorf("FirestoreDatabaseName: want storycloud, got %s", cfg.FirestoreDatabaseName)
+	if cfg.StoragePath != "/app/data/storage" {
+		t.Errorf("StoragePath: want /app/data/storage, got %s", cfg.StoragePath)
 	}
 	if cfg.IFDBCacheTTL != 10*time.Minute {
 		t.Errorf("IFDBCacheTTL: want 10m, got %v", cfg.IFDBCacheTTL)
@@ -61,8 +60,8 @@ func TestLoadFromEnv(t *testing.T) {
 	os.Setenv("PORT", "9090")
 	os.Setenv("APP_VERSION", "1.2.3")
 	os.Setenv("ENVIRONMENT", "staging")
-	os.Setenv("GCP_PROJECT_ID", "my-project")
-	os.Setenv("FIRESTORE_DATABASE_NAME", "my-db")
+	os.Setenv("DB_PATH", "/data/custom.db")
+	os.Setenv("STORAGE_PATH", "/data/storage")
 	os.Setenv("IFDB_CACHE_TTL", "5m")
 	defer clearEnv()
 
@@ -80,11 +79,11 @@ func TestLoadFromEnv(t *testing.T) {
 	if cfg.Environment != "staging" {
 		t.Errorf("Environment: want staging, got %s", cfg.Environment)
 	}
-	if cfg.ProjectID != "my-project" {
-		t.Errorf("ProjectID: want my-project, got %s", cfg.ProjectID)
+	if cfg.DBPath != "/data/custom.db" {
+		t.Errorf("DBPath: want /data/custom.db, got %s", cfg.DBPath)
 	}
-	if cfg.FirestoreDatabaseName != "my-db" {
-		t.Errorf("FirestoreDatabaseName: want my-db, got %s", cfg.FirestoreDatabaseName)
+	if cfg.StoragePath != "/data/storage" {
+		t.Errorf("StoragePath: want /data/storage, got %s", cfg.StoragePath)
 	}
 	if cfg.IFDBCacheTTL != 5*time.Minute {
 		t.Errorf("IFDBCacheTTL: want 5m, got %v", cfg.IFDBCacheTTL)

@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"storycloud/internal/auth"
 	"storycloud/internal/store"
 )
 
@@ -375,6 +378,35 @@ func (m *MockStore) DeleteAIConversation(_ context.Context, projectID string) (i
 
 func (m *MockStore) Close() error { return nil }
 
+// Auth stubs — satisfy store.Store after auth methods were added to the interface.
+
+func (m *MockStore) CreateUser(_ context.Context, u *auth.User, _ string) error {
+	if u.UID == "" {
+		u.UID = "u-mock"
+	}
+	return nil
+}
+
+func (m *MockStore) GetUserByEmail(_ context.Context, _ string) (*auth.User, string, error) {
+	return nil, "", nil
+}
+
+func (m *MockStore) GetUserByID(_ context.Context, _ string) (*auth.User, error) {
+	return nil, nil
+}
+
+func (m *MockStore) CreateSession(_ context.Context, _ *auth.Session) error { return nil }
+
+func (m *MockStore) GetSession(_ context.Context, _ string) (*auth.Session, error) {
+	return nil, nil
+}
+
+func (m *MockStore) DeleteSession(_ context.Context, _ string) error { return nil }
+
+func (m *MockStore) DeleteExpiredSessions(_ context.Context, _ time.Time) (int, error) {
+	return 0, nil
+}
+
 // compile-time assertion
 var _ store.Store = (*MockStore)(nil)
 
@@ -657,5 +689,999 @@ func TestListRunsByUserSingleRun(t *testing.T) {
 	}
 	if results[0].ID != runID {
 		t.Errorf("ID = %q; want %q", results[0].ID, runID)
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SQLiteStore integration tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+// newTestSQLiteStore opens a temporary SQLite database backed by a temp
+// storage directory. The test is registered for cleanup automatically.
+func newTestSQLiteStore(t *testing.T) *store.SQLiteStore {
+	t.Helper()
+	dir := t.TempDir()
+	blob := store.NewLocalBlobStore(filepath.Join(dir, "storage"))
+	dbPath := filepath.Join(dir, "test.db")
+	s, err := store.NewSQLiteStore(context.Background(), dbPath, blob)
+	if err != nil {
+		t.Fatalf("NewSQLiteStore: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	return s
+}
+
+// createTestUser inserts a minimal user row and returns it.
+func createTestUser(t *testing.T, s *store.SQLiteStore, id, email string) *auth.User {
+	t.Helper()
+	ctx := context.Background()
+	u := &auth.User{UID: id, Email: email, Name: "Test User"}
+	if err := s.CreateUser(ctx, u, "$2a$12$dummyhashfortest000000000000000000000000000000000000000000"); err != nil {
+		t.Fatalf("CreateUser(%s): %v", id, err)
+	}
+	return u
+}
+
+// ── Users ────────────────────────────────────────────────────────────────────
+
+func TestSQLiteCreateUser(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := &auth.User{Email: "alice@example.com", Name: "Alice"}
+	err := s.CreateUser(ctx, u, "hash")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if u.UID == "" {
+		t.Error("UID should be set after CreateUser")
+	}
+}
+
+func TestSQLiteGetUserByEmail(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	_ = createTestUser(t, s, "u-001", "bob@example.com")
+
+	got, hash, err := s.GetUserByEmail(ctx, "bob@example.com")
+	if err != nil {
+		t.Fatalf("GetUserByEmail: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil user")
+	}
+	if got.Email != "bob@example.com" {
+		t.Errorf("Email = %q; want bob@example.com", got.Email)
+	}
+	if hash == "" {
+		t.Error("hash should not be empty")
+	}
+}
+
+func TestSQLiteGetUserByEmail_NotFound(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	got, hash, err := s.GetUserByEmail(ctx, "nobody@example.com")
+	if err != nil {
+		t.Fatalf("GetUserByEmail: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil for missing email, got %+v", got)
+	}
+	if hash != "" {
+		t.Errorf("expected empty hash, got %q", hash)
+	}
+}
+
+func TestSQLiteGetUserByID(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-getbyid01", "getbyid@example.com")
+
+	got, err := s.GetUserByID(ctx, u.UID)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil user")
+	}
+	if got.UID != u.UID {
+		t.Errorf("UID = %q; want %q", got.UID, u.UID)
+	}
+}
+
+func TestSQLiteGetUserByID_NotFound(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	got, err := s.GetUserByID(ctx, "u-doesnotexist")
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil for missing UID, got %+v", got)
+	}
+}
+
+func TestSQLiteCreateUser_DuplicateEmail(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	_ = createTestUser(t, s, "u-dup01", "dup@example.com")
+
+	u2 := &auth.User{Email: "dup@example.com", Name: "Dup"}
+	err := s.CreateUser(ctx, u2, "hash2")
+	if err == nil {
+		t.Fatal("expected error for duplicate email, got nil")
+	}
+	if !strings.Contains(err.Error(), "email") && err != auth.ErrEmailTaken {
+		// Either ErrEmailTaken or an error mentioning email is acceptable.
+		t.Errorf("error = %v; want ErrEmailTaken", err)
+	}
+}
+
+// ── Sessions ─────────────────────────────────────────────────────────────────
+
+func TestSQLiteCreateAndGetSession(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-sess01", "sess@example.com")
+	now := time.Now().UTC().Truncate(time.Second)
+
+	sess := &auth.Session{
+		ID:        "test-session-token-43chars-xxxxxxxxxxx",
+		UserID:    u.UID,
+		CreatedAt: now,
+		ExpiresAt: now.Add(24 * time.Hour),
+	}
+	if err := s.CreateSession(ctx, sess); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	got, err := s.GetSession(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil session")
+	}
+	if got.UserID != u.UID {
+		t.Errorf("UserID = %q; want %q", got.UserID, u.UID)
+	}
+}
+
+func TestSQLiteGetSession_NotFound(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	got, err := s.GetSession(ctx, "nonexistent-token")
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil for missing session, got %+v", got)
+	}
+}
+
+func TestSQLiteGetSession_Expired(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-expsess", "expsess@example.com")
+	past := time.Now().Add(-2 * time.Hour).UTC()
+
+	sess := &auth.Session{
+		ID:        "expired-session-token-43chars-xxxxxxxxxx",
+		UserID:    u.UID,
+		CreatedAt: past,
+		ExpiresAt: past.Add(time.Hour), // already expired
+	}
+	if err := s.CreateSession(ctx, sess); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	// GetSession must return nil for expired sessions.
+	got, err := s.GetSession(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if got != nil {
+		t.Error("expected nil for expired session, got non-nil")
+	}
+}
+
+func TestSQLiteDeleteSession(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-delsess", "delsess@example.com")
+	now := time.Now().UTC()
+	sess := &auth.Session{
+		ID:        "deleteme-session-token-43chars-xxxxxxxx",
+		UserID:    u.UID,
+		CreatedAt: now,
+		ExpiresAt: now.Add(24 * time.Hour),
+	}
+	_ = s.CreateSession(ctx, sess)
+
+	if err := s.DeleteSession(ctx, sess.ID); err != nil {
+		t.Fatalf("DeleteSession: %v", err)
+	}
+	got, _ := s.GetSession(ctx, sess.ID)
+	if got != nil {
+		t.Error("session should be deleted")
+	}
+}
+
+func TestSQLiteDeleteExpiredSessions(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-expclean", "expclean@example.com")
+	now := time.Now().UTC()
+
+	// Insert one expired session and one valid session.
+	expired := &auth.Session{
+		ID:        "expired-session-43chars-yyyyyyyyyyyyyyy",
+		UserID:    u.UID,
+		CreatedAt: now.Add(-2 * time.Hour),
+		ExpiresAt: now.Add(-time.Hour),
+	}
+	valid := &auth.Session{
+		ID:        "valid-session-43chars-zzzzzzzzzzzzzzzzz",
+		UserID:    u.UID,
+		CreatedAt: now,
+		ExpiresAt: now.Add(24 * time.Hour),
+	}
+	_ = s.CreateSession(ctx, expired)
+	_ = s.CreateSession(ctx, valid)
+
+	n, err := s.DeleteExpiredSessions(ctx, now)
+	if err != nil {
+		t.Fatalf("DeleteExpiredSessions: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("deleted count = %d; want 1", n)
+	}
+}
+
+// ── Runs ─────────────────────────────────────────────────────────────────────
+
+func TestSQLiteCreateGetUpdateDeleteRun(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-runtest", "runtest@example.com")
+	now := time.Now().UTC().Truncate(time.Second)
+
+	r := &store.Run{
+		ID:         "r-01TESTRUNSQLITEXX0000001",
+		SourceType: "ifdb",
+		IFDBId:     "abc123def456",
+		Title:      "Zork I",
+		Format:     "z5",
+		UserID:     u.UID,
+		Status:     "pending",
+		CreatedAt:  now,
+	}
+
+	// Create
+	if err := s.CreateRun(ctx, r); err != nil {
+		t.Fatalf("CreateRun: %v", err)
+	}
+
+	// Get
+	got, err := s.GetRun(ctx, r.ID)
+	if err != nil {
+		t.Fatalf("GetRun: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil run")
+	}
+	if got.Title != "Zork I" {
+		t.Errorf("Title = %q; want Zork I", got.Title)
+	}
+	if got.Status != "pending" {
+		t.Errorf("Status = %q; want pending", got.Status)
+	}
+
+	// Update
+	got.Status = "running"
+	if err := s.UpdateRun(ctx, got); err != nil {
+		t.Fatalf("UpdateRun: %v", err)
+	}
+	got2, _ := s.GetRun(ctx, r.ID)
+	if got2.Status != "running" {
+		t.Errorf("Status after update = %q; want running", got2.Status)
+	}
+
+	// Delete
+	if err := s.DeleteRun(ctx, r.ID); err != nil {
+		t.Fatalf("DeleteRun: %v", err)
+	}
+	got3, _ := s.GetRun(ctx, r.ID)
+	if got3 != nil {
+		t.Error("run should be nil after delete")
+	}
+}
+
+func TestSQLiteGetRun_NotFound(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	got, err := s.GetRun(ctx, "r-DOESNOTEXISTXXXXXXXX001")
+	if err != nil {
+		t.Fatalf("GetRun: %v", err)
+	}
+	if got != nil {
+		t.Error("expected nil for missing run")
+	}
+}
+
+func TestSQLiteListRunsByUser_OrderedByLastActive(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-listruns", "listruns@example.com")
+	now := time.Now().UTC().Truncate(time.Second)
+
+	older := now.Add(-time.Hour)
+	newer := now
+
+	// Insert in reverse order (older first, newer second) so the ORDER BY is tested.
+	r1 := &store.Run{
+		ID:           "r-01LISTRUNS0OLDER000001",
+		SourceType:   "ifdb",
+		UserID:       u.UID,
+		Status:       "suspended",
+		CreatedAt:    older,
+		LastActiveAt: &older,
+	}
+	r2 := &store.Run{
+		ID:           "r-01LISTRUNS0NEWER000001",
+		SourceType:   "ifdb",
+		UserID:       u.UID,
+		Status:       "suspended",
+		CreatedAt:    newer,
+		LastActiveAt: &newer,
+	}
+	_ = s.CreateRun(ctx, r1)
+	_ = s.CreateRun(ctx, r2)
+
+	results, err := s.ListRunsByUser(ctx, u.UID, 50)
+	if err != nil {
+		t.Fatalf("ListRunsByUser: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("len = %d; want 2", len(results))
+	}
+	// Newer run should come first (ORDER BY last_active_at DESC).
+	if results[0].ID != r2.ID {
+		t.Errorf("first result = %q; want %q (newest first)", results[0].ID, r2.ID)
+	}
+}
+
+func TestSQLiteListRunsByUser_LimitClamp(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-limitclamp", "limitclamp@example.com")
+	now := time.Now().UTC()
+
+	// Insert 5 runs.
+	for i := 0; i < 5; i++ {
+		id := fmt.Sprintf("r-LIMITCLAMPSQLITE%08d", i)
+		_ = s.CreateRun(ctx, &store.Run{
+			ID:         id,
+			SourceType: "ifdb",
+			UserID:     u.UID,
+			Status:     "suspended",
+			CreatedAt:  now.Add(time.Duration(i) * time.Second),
+		})
+	}
+
+	// limit=3 should return at most 3.
+	results, err := s.ListRunsByUser(ctx, u.UID, 3)
+	if err != nil {
+		t.Fatalf("ListRunsByUser limit=3: %v", err)
+	}
+	if len(results) > 3 {
+		t.Errorf("limit=3: got %d results; want ≤3", len(results))
+	}
+
+	// limit=200 should be clamped to 50.
+	all, err := s.ListRunsByUser(ctx, u.UID, 200)
+	if err != nil {
+		t.Fatalf("ListRunsByUser limit=200: %v", err)
+	}
+	if len(all) != 5 {
+		t.Errorf("limit=200 (clamped to 50): got %d; want 5", len(all))
+	}
+
+	// limit=0 should be normalized to 1 (not panic or return all).
+	one, err := s.ListRunsByUser(ctx, u.UID, 0)
+	if err != nil {
+		t.Fatalf("ListRunsByUser limit=0: %v", err)
+	}
+	if len(one) > 1 {
+		t.Errorf("limit=0 (normalized to 1): got %d; want ≤1", len(one))
+	}
+}
+
+func TestSQLiteListRunsByUser_EmptyResult(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	results, err := s.ListRunsByUser(ctx, "u-nobody", 50)
+	if err != nil {
+		t.Fatalf("ListRunsByUser: %v", err)
+	}
+	if results == nil {
+		t.Error("expected empty slice, got nil")
+	}
+	if len(results) != 0 {
+		t.Errorf("len = %d; want 0", len(results))
+	}
+}
+
+func TestSQLiteDeleteAbandonedPendingRuns(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-abandoned", "abandoned@example.com")
+	now := time.Now().UTC()
+
+	old := &store.Run{
+		ID:         "r-OLDPENDINGSQLITE000001",
+		SourceType: "ifdb",
+		UserID:     u.UID,
+		Status:     "pending",
+		CreatedAt:  now.Add(-2 * time.Hour),
+	}
+	recent := &store.Run{
+		ID:         "r-NEWPENDINGSQLITE000001",
+		SourceType: "ifdb",
+		UserID:     u.UID,
+		Status:     "pending",
+		CreatedAt:  now.Add(time.Hour),
+	}
+	running := &store.Run{
+		ID:         "r-RUNNINGSQLITE00000001",
+		SourceType: "ifdb",
+		UserID:     u.UID,
+		Status:     "running",
+		CreatedAt:  now.Add(-2 * time.Hour),
+	}
+	_ = s.CreateRun(ctx, old)
+	_ = s.CreateRun(ctx, recent)
+	_ = s.CreateRun(ctx, running)
+
+	n, err := s.DeleteAbandonedPendingRuns(ctx, now)
+	if err != nil {
+		t.Fatalf("DeleteAbandonedPendingRuns: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("deleted = %d; want 1", n)
+	}
+	if r, _ := s.GetRun(ctx, old.ID); r != nil {
+		t.Error("old pending run should be deleted")
+	}
+	if r, _ := s.GetRun(ctx, recent.ID); r == nil {
+		t.Error("recent pending run should NOT be deleted")
+	}
+	if r, _ := s.GetRun(ctx, running.ID); r == nil {
+		t.Error("running run should NOT be deleted")
+	}
+}
+
+// ── Projects ─────────────────────────────────────────────────────────────────
+
+func TestSQLiteCreateGetProject(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-projtest", "projtest@example.com")
+	now := time.Now().UTC().Truncate(time.Second)
+
+	p := &store.Project{
+		ID:          "p-01SQLITETESTPROJECT001",
+		OwnerUID:    u.UID,
+		Name:        "My Project",
+		Description: "A great project",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := s.CreateProject(ctx, p); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	got, err := s.GetProject(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil project")
+	}
+	if got.Name != "My Project" {
+		t.Errorf("Name = %q; want My Project", got.Name)
+	}
+	if got.Description != "A great project" {
+		t.Errorf("Description = %q; want A great project", got.Description)
+	}
+}
+
+func TestSQLiteGetProject_NotFound(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	got, err := s.GetProject(ctx, "p-DOESNOTEXISTXXXXXXX001")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if got != nil {
+		t.Error("expected nil for missing project")
+	}
+}
+
+func TestSQLiteUpdateProjectMeta(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-projmeta", "projmeta@example.com")
+	now := time.Now().UTC().Truncate(time.Second)
+
+	p := &store.Project{
+		ID:        "p-01UPDATEMETA000000001",
+		OwnerUID:  u.UID,
+		Name:      "Old Name",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	_ = s.CreateProject(ctx, p)
+
+	if err := s.UpdateProjectMeta(ctx, p.ID, "New Name", "new desc", now.Add(time.Minute)); err != nil {
+		t.Fatalf("UpdateProjectMeta: %v", err)
+	}
+
+	got, _ := s.GetProject(ctx, p.ID)
+	if got.Name != "New Name" {
+		t.Errorf("Name = %q; want New Name", got.Name)
+	}
+	if got.Description != "new desc" {
+		t.Errorf("Description = %q; want new desc", got.Description)
+	}
+}
+
+func TestSQLiteListProjectsByOwner(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u1 := createTestUser(t, s, "u-owner01", "owner01@example.com")
+	u2 := createTestUser(t, s, "u-owner02", "owner02@example.com")
+	now := time.Now().UTC()
+
+	for i := 0; i < 3; i++ {
+		_ = s.CreateProject(ctx, &store.Project{
+			ID:        fmt.Sprintf("p-OWNER01PROJ%013d", i),
+			OwnerUID:  u1.UID,
+			Name:      fmt.Sprintf("Proj %d", i),
+			CreatedAt: now,
+			UpdatedAt: now.Add(time.Duration(i) * time.Second),
+		})
+	}
+	_ = s.CreateProject(ctx, &store.Project{
+		ID:        "p-OWNER02PROJ000000001",
+		OwnerUID:  u2.UID,
+		Name:      "Other project",
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
+	results, err := s.ListProjectsByOwner(ctx, u1.UID, 50)
+	if err != nil {
+		t.Fatalf("ListProjectsByOwner: %v", err)
+	}
+	if len(results) != 3 {
+		t.Errorf("len = %d; want 3", len(results))
+	}
+	for _, p := range results {
+		if p.OwnerUID != u1.UID {
+			t.Errorf("unexpected owner %q", p.OwnerUID)
+		}
+	}
+}
+
+// ── Project sources ───────────────────────────────────────────────────────────
+
+func TestSQLitePutAndGetProjectSource(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-srcstest", "srcstest@example.com")
+	now := time.Now().UTC()
+
+	p := &store.Project{
+		ID:        "p-01SOURCETESTXXX00001",
+		OwnerUID:  u.UID,
+		Name:      "Source Test",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	_ = s.CreateProject(ctx, p)
+
+	const src = `"The Blue Door" by Alice Author.\n\nThe Hallway is a room.\n`
+	if err := s.PutProjectSource(ctx, p.ID, src, now.Add(time.Minute)); err != nil {
+		t.Fatalf("PutProjectSource: %v", err)
+	}
+
+	got, err := s.GetProjectSource(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("GetProjectSource: %v", err)
+	}
+	if got != src {
+		t.Errorf("source mismatch: got %q; want %q", got, src)
+	}
+
+	// project.updated_at should be bumped.
+	pUpd, _ := s.GetProject(ctx, p.ID)
+	if !pUpd.UpdatedAt.After(now) {
+		t.Error("project.updated_at should be bumped by PutProjectSource")
+	}
+}
+
+func TestSQLiteGetProjectSource_Absent(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-nosrc", "nosrc@example.com")
+	now := time.Now().UTC()
+	_ = s.CreateProject(ctx, &store.Project{
+		ID:        "p-01NOSOURCE0000000001",
+		OwnerUID:  u.UID,
+		Name:      "No Source",
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
+	got, err := s.GetProjectSource(ctx, "p-01NOSOURCE0000000001")
+	if err != nil {
+		t.Fatalf("GetProjectSource: %v", err)
+	}
+	if got != "" {
+		t.Errorf("expected empty string, got %q", got)
+	}
+}
+
+func TestSQLiteDeleteProjectSource(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-delsrc", "delsrc@example.com")
+	now := time.Now().UTC()
+	_ = s.CreateProject(ctx, &store.Project{
+		ID:        "p-01DELSOURCE000000001",
+		OwnerUID:  u.UID,
+		Name:      "Del Source",
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+	_ = s.PutProjectSource(ctx, "p-01DELSOURCE000000001", "hello", now)
+
+	if err := s.DeleteProjectSource(ctx, "p-01DELSOURCE000000001"); err != nil {
+		t.Fatalf("DeleteProjectSource: %v", err)
+	}
+
+	got, _ := s.GetProjectSource(ctx, "p-01DELSOURCE000000001")
+	if got != "" {
+		t.Errorf("source should be empty after delete, got %q", got)
+	}
+
+	// Idempotent — second delete should not error.
+	if err := s.DeleteProjectSource(ctx, "p-01DELSOURCE000000001"); err != nil {
+		t.Errorf("second DeleteProjectSource: %v", err)
+	}
+}
+
+// ── AI conversation ───────────────────────────────────────────────────────────
+
+func TestSQLiteAIConversation(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-aitest", "aitest@example.com")
+	now := time.Now().UTC().Truncate(time.Second)
+
+	p := &store.Project{
+		ID:        "p-01AICONVTEST000000001",
+		OwnerUID:  u.UID,
+		Name:      "AI Test Project",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	_ = s.CreateProject(ctx, p)
+
+	// Insert 3 turns.
+	for i := 0; i < 3; i++ {
+		turn := &store.AITurn{
+			ID:               fmt.Sprintf("t-AICONVTEST%013d", i),
+			ProjectID:        p.ID,
+			OwnerUID:         u.UID,
+			Kind:             "chat",
+			UserMessage:      fmt.Sprintf("message %d", i),
+			AssistantReply:   fmt.Sprintf("reply %d", i),
+			ModelRequestedAt: now.Add(time.Duration(i) * time.Minute),
+			ModelFinishedAt:  now.Add(time.Duration(i)*time.Minute + 30*time.Second),
+		}
+		if err := s.CreateAITurn(ctx, turn); err != nil {
+			t.Fatalf("CreateAITurn %d: %v", i, err)
+		}
+	}
+
+	turns, err := s.ListAIConversation(ctx, p.ID, 200)
+	if err != nil {
+		t.Fatalf("ListAIConversation: %v", err)
+	}
+	if len(turns) != 3 {
+		t.Fatalf("len = %d; want 3", len(turns))
+	}
+	// Should be chronological (ASC by model_requested_at).
+	if turns[0].UserMessage != "message 0" {
+		t.Errorf("turns[0].UserMessage = %q; want message 0", turns[0].UserMessage)
+	}
+
+	// DeleteAIConversation.
+	n, err := s.DeleteAIConversation(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("DeleteAIConversation: %v", err)
+	}
+	if n != 3 {
+		t.Errorf("deleted = %d; want 3", n)
+	}
+
+	// After delete, list returns empty.
+	after, _ := s.ListAIConversation(ctx, p.ID, 200)
+	if len(after) != 0 {
+		t.Errorf("after delete: len = %d; want 0", len(after))
+	}
+}
+
+func TestSQLiteListAIConversation_Empty(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	turns, err := s.ListAIConversation(ctx, "p-NOPROJECTXXXXXXXXXXX", 200)
+	if err != nil {
+		t.Fatalf("ListAIConversation: %v", err)
+	}
+	if turns == nil {
+		t.Error("expected empty slice, got nil")
+	}
+	if len(turns) != 0 {
+		t.Errorf("len = %d; want 0", len(turns))
+	}
+}
+
+// ── Builds ────────────────────────────────────────────────────────────────────
+
+func TestSQLiteCreateGetUpdateBuild(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-buildtest", "buildtest@example.com")
+	now := time.Now().UTC().Truncate(time.Second)
+
+	p := &store.Project{
+		ID:        "p-01BUILDTESTPROJECT001",
+		OwnerUID:  u.UID,
+		Name:      "Build Test",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	_ = s.CreateProject(ctx, p)
+
+	b := &store.Build{
+		ID:        "b-01SQLITEBUILDTEST0001",
+		ProjectID: p.ID,
+		OwnerUID:  u.UID,
+		Status:    "pending",
+		CreatedAt: now,
+	}
+	if err := s.CreateBuild(ctx, b); err != nil {
+		t.Fatalf("CreateBuild: %v", err)
+	}
+
+	got, err := s.GetBuild(ctx, b.ID)
+	if err != nil {
+		t.Fatalf("GetBuild: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil build")
+	}
+	if got.Status != "pending" {
+		t.Errorf("Status = %q; want pending", got.Status)
+	}
+
+	// Update to succeeded.
+	got.Status = "succeeded"
+	got.ArtifactFormat = "ulx"
+	if err := s.UpdateBuild(ctx, got); err != nil {
+		t.Fatalf("UpdateBuild: %v", err)
+	}
+
+	got2, _ := s.GetBuild(ctx, b.ID)
+	if got2.Status != "succeeded" {
+		t.Errorf("Status after update = %q; want succeeded", got2.Status)
+	}
+	if got2.ArtifactFormat != "ulx" {
+		t.Errorf("ArtifactFormat = %q; want ulx", got2.ArtifactFormat)
+	}
+}
+
+func TestSQLiteListBuildsByProject(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-listbuilds", "listbuilds@example.com")
+	now := time.Now().UTC()
+
+	p := &store.Project{
+		ID:        "p-01LISTBUILDSPROJECT01",
+		OwnerUID:  u.UID,
+		Name:      "List Builds",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	_ = s.CreateProject(ctx, p)
+
+	for i := 0; i < 3; i++ {
+		_ = s.CreateBuild(ctx, &store.Build{
+			ID:        fmt.Sprintf("b-LISTBUILDSSQLITE%08d", i),
+			ProjectID: p.ID,
+			OwnerUID:  u.UID,
+			Status:    "pending",
+			CreatedAt: now.Add(time.Duration(i) * time.Second),
+		})
+	}
+
+	results, err := s.ListBuildsByProject(ctx, p.ID, 50)
+	if err != nil {
+		t.Fatalf("ListBuildsByProject: %v", err)
+	}
+	if len(results) != 3 {
+		t.Errorf("len = %d; want 3", len(results))
+	}
+}
+
+func TestSQLiteDeleteBuildsForProject(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	u := createTestUser(t, s, "u-delbuilds", "delbuilds@example.com")
+	now := time.Now().UTC()
+	p := &store.Project{
+		ID:        "p-01DELETEBUILDSTEST001",
+		OwnerUID:  u.UID,
+		Name:      "Del Builds",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	_ = s.CreateProject(ctx, p)
+
+	for i := 0; i < 2; i++ {
+		_ = s.CreateBuild(ctx, &store.Build{
+			ID:        fmt.Sprintf("b-DELETEBUILDSTEST%08d", i),
+			ProjectID: p.ID,
+			OwnerUID:  u.UID,
+			Status:    "succeeded",
+			CreatedAt: now,
+		})
+	}
+
+	n, err := s.DeleteBuildsForProject(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("DeleteBuildsForProject: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("deleted = %d; want 2", n)
+	}
+}
+
+// ── IFDB cache ────────────────────────────────────────────────────────────────
+
+func TestSQLiteGetAndPutCachedGame(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	// Put a fresh entry.
+	g := &store.CachedGame{
+		TUID:      "0dbnusxunq7fw5ro",
+		Payload:   []byte(`{"id":"0dbnusxunq7fw5ro","title":"Zork I"}`),
+		FetchedAt: now,
+		ExpiresAt: now.Add(10 * time.Minute),
+	}
+	if err := s.PutCachedGame(ctx, g); err != nil {
+		t.Fatalf("PutCachedGame: %v", err)
+	}
+
+	got, err := s.GetCachedGame(ctx, "0dbnusxunq7fw5ro")
+	if err != nil {
+		t.Fatalf("GetCachedGame: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil CachedGame")
+	}
+	if string(got.Payload) != string(g.Payload) {
+		t.Errorf("Payload mismatch")
+	}
+}
+
+func TestSQLiteGetCachedGame_Expired(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	// Put an already-expired entry.
+	g := &store.CachedGame{
+		TUID:      "expiredgame0000001",
+		Payload:   []byte(`{"id":"expired"}`),
+		FetchedAt: now.Add(-20 * time.Minute),
+		ExpiresAt: now.Add(-10 * time.Minute), // already expired
+	}
+	_ = s.PutCachedGame(ctx, g)
+
+	// GetCachedGame must return nil for expired entries.
+	got, err := s.GetCachedGame(ctx, "expiredgame0000001")
+	if err != nil {
+		t.Fatalf("GetCachedGame expired: %v", err)
+	}
+	if got != nil {
+		t.Error("expected nil for expired CachedGame, got non-nil")
+	}
+}
+
+func TestSQLiteGetCachedGame_NotFound(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+
+	got, err := s.GetCachedGame(ctx, "nonexistentgame000001")
+	if err != nil {
+		t.Fatalf("GetCachedGame not found: %v", err)
+	}
+	if got != nil {
+		t.Error("expected nil for missing cache entry")
+	}
+}
+
+func TestSQLitePutCachedGame_Overwrite(t *testing.T) {
+	s := newTestSQLiteStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	g1 := &store.CachedGame{
+		TUID:      "overwrite0000001",
+		Payload:   []byte(`{"v":1}`),
+		FetchedAt: now,
+		ExpiresAt: now.Add(10 * time.Minute),
+	}
+	_ = s.PutCachedGame(ctx, g1)
+
+	g2 := &store.CachedGame{
+		TUID:      "overwrite0000001",
+		Payload:   []byte(`{"v":2}`),
+		FetchedAt: now,
+		ExpiresAt: now.Add(10 * time.Minute),
+	}
+	if err := s.PutCachedGame(ctx, g2); err != nil {
+		t.Fatalf("PutCachedGame overwrite: %v", err)
+	}
+
+	got, _ := s.GetCachedGame(ctx, "overwrite0000001")
+	if string(got.Payload) != `{"v":2}` {
+		t.Errorf("payload after overwrite = %q; want {\"v\":2}", got.Payload)
 	}
 }

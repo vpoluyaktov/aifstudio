@@ -135,6 +135,9 @@ func (s *Server) SetupRoutes() http.Handler {
 	mux.HandleFunc("PATCH /api/projects/{id}", s.handlePatchProject)
 	mux.HandleFunc("DELETE /api/projects/{id}", s.handleDeleteProject)
 	// PATCH is the canonical method (§10.0.3); PUT returns 204 No Content (§10.0.4).
+	// GET /api/projects/{id}/source must be registered before PATCH/PUT so the
+	// literal "source" segment takes priority.
+	mux.HandleFunc("GET /api/projects/{id}/source", s.handleGetProjectSource)
 	mux.HandleFunc("PATCH /api/projects/{id}/source", s.handlePatchProjectSource)
 	mux.HandleFunc("PUT /api/projects/{id}/source", s.handlePutProjectSource)
 	mux.HandleFunc("POST /api/projects/{id}/builds", s.handleCreateBuild)

@@ -158,11 +158,8 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	resp.SourceBytes = int64(len(req.Source))
 
 	if s.store != nil {
-		su, _ := s.store.SignedProjectSourceURL(r.Context(), id, s.cfg.SourceSignedURLTTL)
-		resp.SourceURL = su.URL
-		if !su.ExpiresAt.IsZero() {
-			resp.SourceURLExpiresAt = su.ExpiresAt.UTC().Format(time.RFC3339Nano)
-		}
+		// Local storage: serve source directly via the project source endpoint.
+		resp.SourceURL = "/api/projects/" + id + "/source"
 	}
 
 	writeJSON(w, http.StatusCreated, resp)
@@ -224,11 +221,8 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if exists {
-		su, _ := s.store.SignedProjectSourceURL(r.Context(), id, s.cfg.SourceSignedURLTTL)
-		resp.SourceURL = su.URL
-		if !su.ExpiresAt.IsZero() {
-			resp.SourceURLExpiresAt = su.ExpiresAt.UTC().Format(time.RFC3339Nano)
-		}
+		// Local storage: serve source directly via the project source endpoint.
+		resp.SourceURL = "/api/projects/" + id + "/source"
 	}
 
 	writeJSON(w, http.StatusOK, resp)
@@ -659,6 +653,53 @@ func projectToListResponse(p *store.Project) listProjectResponse {
 		CreatedAt:     p.CreatedAt.UTC().Format(time.RFC3339Nano),
 		UpdatedAt:     p.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
+}
+
+// GET /api/projects/{id}/source
+// Returns the Inform 7 source text for the project. Owner-only.
+// Replaces the former GCS signed-URL pattern: the client requests the source
+// directly from the service rather than fetching a pre-signed object URL.
+func (s *Server) handleGetProjectSource(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "auth_required", "authentication required")
+		return
+	}
+
+	id := r.PathValue("id")
+	if !projectIDRE.MatchString(id) {
+		writeError(w, http.StatusBadRequest, "invalid_id", "id must match ^p-[0-9A-Z]{26}$")
+		return
+	}
+
+	if s.store == nil {
+		writeError(w, http.StatusNotFound, "not_found", "project not found")
+		return
+	}
+
+	p, err := s.store.GetProject(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal", "failed to get project")
+		return
+	}
+	if p == nil {
+		writeError(w, http.StatusNotFound, "not_found", "project not found")
+		return
+	}
+	if p.OwnerUID != user.UID {
+		writeError(w, http.StatusForbidden, "forbidden", "not owner")
+		return
+	}
+
+	src, err := s.store.GetProjectSource(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal", "failed to read project source")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(src))
 }
 
 func buildToResponse(b *store.Build) buildResponse {

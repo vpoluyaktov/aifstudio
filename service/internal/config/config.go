@@ -18,9 +18,6 @@ type Config struct {
 	StoragePath   string        // STORAGE_PATH: local blob root (default /app/data/storage)
 	SessionMaxAge time.Duration // SESSION_MAX_AGE: session cookie lifetime (default 720h = 30 days)
 
-	// SourceSignedURLTTL is retained for handler compatibility — value is hardcoded (no env var).
-	SourceSignedURLTTL time.Duration
-
 	IFDBBaseURL             string
 	IFDBUserAgent           string
 	IFDBCacheTTL            time.Duration
@@ -187,10 +184,9 @@ func Load() (*Config, error) {
 		Version:     version,
 		Environment: env,
 
-		DBPath:             dbPath,
-		StoragePath:        storagePath,
-		SessionMaxAge:      sessionMaxAge,
-		SourceSignedURLTTL: 15 * time.Minute,
+		DBPath:        dbPath,
+		StoragePath:   storagePath,
+		SessionMaxAge: sessionMaxAge,
 
 		IFDBBaseURL:             ifdbBaseURL,
 		IFDBUserAgent:           ifdbUserAgent,

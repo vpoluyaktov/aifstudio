@@ -93,8 +93,9 @@ func TestHistoryRoutingSmoke(t *testing.T) {
 
 		// PUT /api/projects/{id}/source — project exists → 204 (registered)
 		{"PUT", "/api/projects/" + histProjID + "/source", http.StatusNoContent},
-		// Wrong methods on PUT source (PATCH is the other registered method, not tested here)
-		{"GET", "/api/projects/" + histProjID + "/source", http.StatusMethodNotAllowed},
+		// GET /api/projects/{id}/source — now registered; project exists, owner token → 200
+		{"GET", "/api/projects/" + histProjID + "/source", http.StatusOK},
+		// Wrong method on source (DELETE is unregistered)
 		{"DELETE", "/api/projects/" + histProjID + "/source", http.StatusMethodNotAllowed},
 	}
 

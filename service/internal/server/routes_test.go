@@ -338,9 +338,6 @@ func (m *mockStore) GetProjectSourceSize(_ context.Context, id string) (int64, b
 	size, ok := m.sourceSizes[id]
 	return size, ok, nil
 }
-func (m *mockStore) SignedProjectSourceURL(_ context.Context, _ string, _ time.Duration) (store.SignedURL, error) {
-	return store.SignedURL{}, nil
-}
 func (m *mockStore) UpdateProjectAI(_ context.Context, p *store.Project, _ *store.AITurn) (time.Time, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

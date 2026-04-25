@@ -99,9 +99,6 @@ func (m *mockStore) GetProjectSource(_ context.Context, _ string) (string, error
 func (m *mockStore) PutProjectSource(_ context.Context, _, _ string, _ time.Time) error    { return nil }
 func (m *mockStore) DeleteProjectSource(_ context.Context, _ string) error                 { return nil }
 func (m *mockStore) GetProjectSourceSize(_ context.Context, _ string) (int64, bool, error) { return 0, false, nil }
-func (m *mockStore) SignedProjectSourceURL(_ context.Context, _ string, _ time.Duration) (store.SignedURL, error) {
-	return store.SignedURL{}, nil
-}
 func (m *mockStore) UpdateProjectAI(_ context.Context, p *store.Project, _ *store.AITurn) (time.Time, error) {
 	return p.UpdatedAt, nil
 }

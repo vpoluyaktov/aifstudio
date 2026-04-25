@@ -194,11 +194,6 @@ type Store interface {
 	// exists is false (and err is nil) when no source row exists.
 	GetProjectSourceSize(ctx context.Context, projectID string) (size int64, exists bool, err error)
 
-	// SignedProjectSourceURL is a deprecated no-op retained for handler backward
-	// compatibility. Returns an empty SignedURL.
-	// Deprecated: use GET /api/projects/{id}/source instead.
-	SignedProjectSourceURL(ctx context.Context, projectID string, ttl time.Duration) (SignedURL, error)
-
 	// UpdateProjectAI writes updated project metadata and appends an ai_turns row
 	// in a single transaction. Source is written to local storage by the caller
 	// before this call. If turn is nil, only the project is updated.

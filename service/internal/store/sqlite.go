@@ -713,12 +713,6 @@ func (s *SQLiteStore) GetProjectSourceSize(ctx context.Context, projectID string
 	return size, true, nil
 }
 
-// SignedProjectSourceURL is a deprecated no-op stub.
-//
-// Deprecated: use GET /api/projects/{id}/source instead.
-func (s *SQLiteStore) SignedProjectSourceURL(_ context.Context, _ string, _ time.Duration) (SignedURL, error) {
-	return SignedURL{}, nil
-}
 
 // UpdateProjectAI updates project metadata and appends an ai_turns row in a
 // single transaction. If turn is nil, only the project is updated.

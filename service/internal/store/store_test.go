@@ -139,17 +139,6 @@ func (m *MockStore) GetProjectSourceSize(_ context.Context, projectID string) (i
 	return int64(len(src)), true, nil
 }
 
-func (m *MockStore) SignedProjectSourceURL(_ context.Context, projectID string, ttl time.Duration) (store.SignedURL, error) {
-	_, exists, _ := m.GetProjectSourceSize(context.Background(), projectID)
-	if !exists {
-		return store.SignedURL{}, nil
-	}
-	return store.SignedURL{
-		URL:       "mock://source/" + projectID,
-		ExpiresAt: time.Now().Add(ttl),
-	}, nil
-}
-
 func (m *MockStore) UpdateProjectLatestBuild(_ context.Context, id, buildID string) error {
 	if p := m.projects[id]; p != nil {
 		p.LatestBuildID = buildID

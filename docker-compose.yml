@@ -1,0 +1,44 @@
+# AIFStudio — single-service Docker Compose stack.
+#
+# This file is the entire production deployment surface. Operators run:
+#
+#     cp .env.example .env       # set OPENAI_API_KEY and any overrides
+#     docker compose up -d --build
+#
+# `env_file: .env` is mandatory — Compose fails to start if `.env` is missing.
+# There is no fallback; environment configuration is delivered exclusively
+# through that file (see ARCHITECTURE.md §8.2).
+#
+# For production, swap the `build:` block for `image: vpoluyaktov/aifstudio:<version>`
+# (immutable tag — `:latest` only for staging/eval). The CI workflow at
+# .github/workflows/main.yml publishes those tags on every push to `main`.
+
+services:
+  aifstudio:
+    build:
+      context: ./service
+      dockerfile: Dockerfile
+    image: aifstudio:latest
+    container_name: aifstudio
+    ports:
+      - "8080:8080"
+    env_file: .env
+    volumes:
+      # SQLite DB file (and its WAL/SHM sidecars). The host `./data/db`
+      # directory is created by Compose on first `up` if absent.
+      - ./data/db:/app/data/db
+      # Durable blob storage: sessions/, builds/, projects/.
+      - ./data/storage:/app/data/storage
+    restart: unless-stopped
+    # Mirrors the HEALTHCHECK in the Dockerfile so `docker compose ps`
+    # surfaces health status even if the operator runs the image directly.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # SIGTERM drain budget — must be ≥ SHUTDOWN_DRAIN_TIMEOUT in .env so the
+    # service has time to save in-flight interpreter sessions before SIGKILL.
+    # `docker compose stop` defaults to 10s; bump to 30s for headroom.
+    stop_grace_period: 30s

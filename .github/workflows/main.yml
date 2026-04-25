@@ -1,28 +1,42 @@
-name: Deploy StoryCloud to Cloud Run
+name: CI — lint, test, publish to Docker Hub
+
+# AIFStudio CI pipeline.
+#
+# Stages: lint → test → docker build → docker push.
+# There is no Terraform, no GCP, no SSH-to-host, and no smoke test against
+# a live URL. Image publication to Docker Hub is the entire delivery
+# surface — operators pull `vpoluyaktov/aifstudio:<version>` and run
+# `docker compose up -d` on the target host.
+#
+# Triggers:
+#   - push to any branch  → lint + test
+#   - pull request        → lint + test
+#   - push to `main`      → lint + test + build + push (`:latest` and
+#                           `:MAJOR.MINOR.<commit-count>`)
+#   - tag push `v*`       → lint + test + build + push (`:latest` and
+#                           `:<tag-without-v>`)
 
 on:
   push:
-    branches: [main, stage]
+    branches: ['**']
+    tags: ['v*']
   pull_request:
-    branches: [main, stage]
+    branches: ['**']
 
 permissions:
   contents: read
-  id-token: write
 
-# Serialize runs per branch so back-to-back pushes to `stage` (or `main`)
-# don't race for the Terraform state lock on gs://dfh-*-tfstate. A second
-# run waits for the first to finish instead of being cancelled — we never
-# want to skip a commit's deploy.
+# Serialize per-ref so back-to-back pushes don't race for the `:latest` tag.
+# We never want to skip a commit's image build, so cancel-in-progress: false.
 concurrency:
-  group: deploy-${{ github.ref_name }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  # ────────────────────────────────────────────────────────────────────────
-  # Job 1: test — runs on every push and PR.
-  # ────────────────────────────────────────────────────────────────────────
-  test:
+  # ───────────────────────────────────────────────────────────────────────
+  # Job 1: lint-and-test — runs on every push and PR.
+  # ───────────────────────────────────────────────────────────────────────
+  lint-and-test:
     name: Lint, vet, and test
     runs-on: ubuntu-latest
 
@@ -33,12 +47,11 @@ jobs:
       - name: Guard against forbidden GitHub Actions versions
         run: |
           set -eu
-          # Forbid pre-Node24 versions of actions that have a newer release.
-          # google-github-actions/* latest is @v2; hashicorp/setup-terraform
-          # latest is @v3 — those are the current versions and must not be
-          # flagged.
-          if grep -rEn '(actions/checkout|actions/setup-go|actions/cache|golangci/golangci-lint-action)@v[0-3]([^0-9]|$)' .github/workflows/ ; then
-            echo "::error::Workflow references a forbidden action version. Use the Node.js 24-compatible versions listed in ARCHITECTURE.md §11 (checkout@v4, setup-go@v5, cache@v4, golangci-lint-action@v6)."
+          # Per ~/.claude/rules/template-standards.md, every action reference
+          # must be on the Node.js 24-compatible major version. Forbid older
+          # majors that have a current release we should be using instead.
+          if grep -rEn '(actions/checkout|actions/setup-go|actions/cache|golangci/golangci-lint-action|docker/setup-buildx-action|docker/login-action|docker/build-push-action)@v[0-3]([^0-9]|$)' .github/workflows/ ; then
+            echo "::error::Workflow references a forbidden action version. Required versions: checkout@v4, setup-go@v5, cache@v4, golangci-lint-action@v6, setup-buildx-action@v3, login-action@v3, build-push-action@v6 (see ARCHITECTURE.md §11.3)."
             exit 1
           fi
 
@@ -66,10 +79,6 @@ jobs:
         working-directory: ./service
         run: go vet ./...
 
-      - name: go test
-        working-directory: ./service
-        run: go test ./...
-
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
@@ -77,206 +86,90 @@ jobs:
           version: latest
           args: --timeout=5m
 
-  # ────────────────────────────────────────────────────────────────────────
-  # Job 2: build-and-deploy — only on push to `stage` or `main`.
-  # ────────────────────────────────────────────────────────────────────────
-  build-and-deploy:
-    name: Build image, Terraform apply, smoke test
-    needs: test
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/stage')
+      - name: go test (with -race)
+        working-directory: ./service
+        run: go test -race ./...
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Job 2: docker-build-and-push — only on push to `main` or `v*` tag.
+  # ───────────────────────────────────────────────────────────────────────
+  docker-build-and-push:
+    name: Build and push image to Docker Hub
+    needs: lint-and-test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          # Need full history so commit count for MAJOR.MINOR.<count> tags
+          # is computable on a `main` push.
           fetch-depth: 0
 
-      - name: Determine environment
-        id: env
-        run: |
-          set -eu
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            echo "ENV_NAME=prod"                     >> "$GITHUB_OUTPUT"
-            echo "ENV_DIR=prod"                      >> "$GITHUB_OUTPUT"
-            echo "VAR_FILE=prod/prod.tfvars"         >> "$GITHUB_OUTPUT"
-            echo "PROJECT_ID=dfh-prod-id"            >> "$GITHUB_OUTPUT"
-            echo "SERVICE_NAME=storycloud-prod"      >> "$GITHUB_OUTPUT"
-            echo "BUCKET_NAME=dfh-prod-storycloud-artifacts" >> "$GITHUB_OUTPUT"
-          else
-            echo "ENV_NAME=stage"                    >> "$GITHUB_OUTPUT"
-            echo "ENV_DIR=stage"                     >> "$GITHUB_OUTPUT"
-            echo "VAR_FILE=stage/stage.tfvars"       >> "$GITHUB_OUTPUT"
-            echo "PROJECT_ID=dfh-stage-id"           >> "$GITHUB_OUTPUT"
-            echo "SERVICE_NAME=storycloud-stage"     >> "$GITHUB_OUTPUT"
-            echo "BUCKET_NAME=dfh-stage-storycloud-artifacts" >> "$GITHUB_OUTPUT"
-          fi
-
-      # ─── Two separate conditional auth steps (stage vs prod) ──────────
-      # A ternary on `credentials_json` triggers a known GitHub Actions
-      # expression bug when the falsy branch is referenced; splitting into
-      # two `if:`-guarded steps avoids it entirely.
-      - name: Authenticate to Google Cloud (staging)
-        if: steps.env.outputs.ENV_NAME == 'stage'
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_STAGE_SA_KEY }}
-
-      - name: Authenticate to Google Cloud (production)
-        if: steps.env.outputs.ENV_NAME == 'prod'
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_PROD_SA_KEY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ steps.env.outputs.PROJECT_ID }}
-
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.6.6"
-
-      - name: Compute version
+      - name: Compute image version
         id: version
         run: |
           set -eu
-          BASE_VERSION=$(cat VERSION)
-          COMMIT_COUNT=$(git rev-list --all --count HEAD)
-          MAJOR_MINOR=$(echo "$BASE_VERSION" | cut -d. -f1,2)
-          VERSION="${MAJOR_MINOR}.${COMMIT_COUNT}"
-          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Building version: v$VERSION"
-
-      - name: Configure Docker for GCR
-        run: gcloud auth configure-docker --quiet
-
-      - name: Build Docker image
-        run: |
-          docker build \
-            -t "gcr.io/${{ steps.env.outputs.PROJECT_ID }}/storycloud:v${{ steps.version.outputs.VERSION }}" \
-            -t "gcr.io/${{ steps.env.outputs.PROJECT_ID }}/storycloud:latest" \
-            -f service/Dockerfile service/
-
-      - name: Push Docker image
-        run: |
-          docker push "gcr.io/${{ steps.env.outputs.PROJECT_ID }}/storycloud:v${{ steps.version.outputs.VERSION }}"
-          docker push "gcr.io/${{ steps.env.outputs.PROJECT_ID }}/storycloud:latest"
-
-      # ─── Pre-deploy resource conflict check ──────────────────────────
-      # Fail fast (with a clear message) if an unmanaged Cloud Run
-      # service, Firestore DB, or GCS bucket with our target names
-      # already exists in the project. Catches cross-project collisions
-      # and stale resources before terraform apply has to discover them.
-      - name: Pre-deploy resource conflict check
-        env:
-          PROJECT_ID: ${{ steps.env.outputs.PROJECT_ID }}
-          SERVICE_NAME: ${{ steps.env.outputs.SERVICE_NAME }}
-          BUCKET_NAME: ${{ steps.env.outputs.BUCKET_NAME }}
-          DB_NAME: storycloud
-        run: |
-          set -eu
-          echo "Pre-flight check in project=$PROJECT_ID ..."
-
-          # Cloud Run service: only fail if a service with the exact name exists AND
-          # was not created by Terraform (terraform apply is idempotent for services
-          # it already owns, so a Terraform-managed conflict is actually fine).
-          if gcloud run services describe "$SERVICE_NAME" \
-               --region=us-central1 --project="$PROJECT_ID" >/dev/null 2>&1 ; then
-            echo "::notice::Cloud Run service $SERVICE_NAME already exists in $PROJECT_ID. Terraform will update it in place."
-          fi
-
-          # Firestore DB: if a DB with our name exists AND we have no terraform state
-          # for it yet, the apply will fail with "already exists". Warn loudly.
-          if gcloud firestore databases describe \
-               --database="$DB_NAME" --project="$PROJECT_ID" >/dev/null 2>&1 ; then
-            echo "::notice::Firestore DB '$DB_NAME' already exists in $PROJECT_ID. Terraform will attempt to adopt it (import block required if not in state)."
-          fi
-
-          # GCS bucket: names are global, so this catches name collisions across
-          # unrelated GCP orgs.
-          if gcloud storage buckets describe "gs://$BUCKET_NAME" >/dev/null 2>&1 ; then
-            OWNER_PROJECT=$(gcloud storage buckets describe "gs://$BUCKET_NAME" --format='value(project_number)' 2>/dev/null || echo "")
-            if [ -n "$OWNER_PROJECT" ]; then
-              echo "::notice::GCS bucket $BUCKET_NAME exists (project number: $OWNER_PROJECT). Terraform will manage if owned by $PROJECT_ID."
-            fi
-          fi
-
-          echo "Pre-flight check complete."
-
-      - name: Terraform init
-        working-directory: ./terraform
-        run: |
-          set -eu
-          cp "${{ steps.env.outputs.ENV_DIR }}/backend.tf" backend.tf
-          terraform init -no-color
-
-      - name: Terraform plan
-        working-directory: ./terraform
-        run: |
-          terraform plan -no-color \
-            -var-file="${{ steps.env.outputs.VAR_FILE }}" \
-            -var="image_tag=v${{ steps.version.outputs.VERSION }}"
-
-      - name: Terraform apply
-        working-directory: ./terraform
-        run: |
-          terraform apply -auto-approve -no-color \
-            -var-file="${{ steps.env.outputs.VAR_FILE }}" \
-            -var="image_tag=v${{ steps.version.outputs.VERSION }}"
-
-      - name: Collect deployment outputs
-        id: tf_out
-        working-directory: ./terraform
-        run: |
-          set -eu
-          SERVICE_URL=$(terraform output -raw service_url)
-          CUSTOM_URL=$(terraform output -raw custom_domain_url)
-          GCS_BUCKET=$(terraform output -raw gcs_bucket_name)
-          echo "SERVICE_URL=$SERVICE_URL" >> "$GITHUB_OUTPUT"
-          echo "CUSTOM_URL=$CUSTOM_URL"   >> "$GITHUB_OUTPUT"
-          echo "GCS_BUCKET=$GCS_BUCKET"   >> "$GITHUB_OUTPUT"
-          echo "Deployed to: $SERVICE_URL"
-          echo "Custom domain: $CUSTOM_URL"
-          echo "Artifact bucket: $GCS_BUCKET"
-
-      - name: Smoke test /health
-        run: |
-          set -eu
-          URL="${{ steps.tf_out.outputs.SERVICE_URL }}"
-          echo "Smoke-testing $URL/health ..."
-          for i in 1 2 3 4 5 ; do
-            if curl -fsS "$URL/health" ; then
-              echo
-              echo "Health check passed on attempt $i."
-              exit 0
-            fi
-            echo "Attempt $i failed, retrying in 10s..."
-            sleep 10
-          done
-          echo "::error::Health check failed for $URL/health after 5 attempts"
-          exit 1
-
-      - name: Smoke test /api/ifdb/search
-        run: |
-          set -eu
-          URL="${{ steps.tf_out.outputs.SERVICE_URL }}"
-          echo "Smoke-testing $URL/api/ifdb/search?q=zork ..."
-          BODY=$(curl -fsS "$URL/api/ifdb/search?q=zork" || true)
-          if [ -z "$BODY" ]; then
-            echo "::warning::IFDB search returned empty body (upstream may be rate-limited). Not treating as fatal."
-            exit 0
-          fi
-          echo "$BODY" | head -c 500
-          echo
-
-      - name: Notify deployment
-        if: always()
-        run: |
-          if [ "${{ job.status }}" = "success" ]; then
-            echo "[${{ steps.env.outputs.ENV_NAME }}] Deployment successful: ${{ steps.tf_out.outputs.SERVICE_URL }}"
-            echo "Version deployed: v${{ steps.version.outputs.VERSION }}"
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Tag push: use the tag verbatim, stripped of the leading `v`.
+            #   refs/tags/v1.2.3 → 1.2.3
+            IMAGE_VERSION="${GITHUB_REF_NAME#v}"
           else
-            echo "[${{ steps.env.outputs.ENV_NAME }}] Deployment failed"
+            # Branch push (main): MAJOR.MINOR from VERSION + commit count.
+            #   VERSION=1.0.0, 142 commits → 1.0.142
+            BASE_VERSION=$(cat VERSION)
+            COMMIT_COUNT=$(git rev-list --all --count HEAD)
+            MAJOR_MINOR=$(echo "$BASE_VERSION" | cut -d. -f1,2)
+            IMAGE_VERSION="${MAJOR_MINOR}.${COMMIT_COUNT}"
           fi
+          echo "IMAGE_VERSION=$IMAGE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building vpoluyaktov/aifstudio:${IMAGE_VERSION}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./service
+          file: ./service/Dockerfile
+          push: true
+          # linux/arm64 deferred — `frob` build-from-source on arm64 has not
+          # been validated; revisit when a real arm64 host is in scope.
+          platforms: linux/amd64
+          tags: |
+            vpoluyaktov/aifstudio:latest
+            vpoluyaktov/aifstudio:${{ steps.version.outputs.IMAGE_VERSION }}
+          # Bake the version into the image as a label and as APP_VERSION
+          # at runtime so /health reports it without needing the operator
+          # to set it in `.env`.
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.IMAGE_VERSION }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.IMAGE_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image digest summary
+        run: |
+          {
+            echo "## Published image"
+            echo
+            echo "| Tag | Value |"
+            echo "|-----|-------|"
+            echo "| Repository | \`vpoluyaktov/aifstudio\` |"
+            echo "| Version    | \`${{ steps.version.outputs.IMAGE_VERSION }}\` |"
+            echo "| Latest     | \`vpoluyaktov/aifstudio:latest\` |"
+            echo "| Digest     | \`${{ steps.build.outputs.digest }}\` |"
+            echo "| Commit     | \`${{ github.sha }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

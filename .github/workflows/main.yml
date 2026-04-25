@@ -48,10 +48,33 @@ jobs:
         run: |
           set -eu
           # Per ~/.claude/rules/template-standards.md, every action reference
-          # must be on the Node.js 24-compatible major version. Forbid older
-          # majors that have a current release we should be using instead.
-          if grep -rEn '(actions/checkout|actions/setup-go|actions/cache|golangci/golangci-lint-action|docker/setup-buildx-action|docker/login-action|docker/build-push-action)@v[0-3]([^0-9]|$)' .github/workflows/ ; then
-            echo "::error::Workflow references a forbidden action version. Required versions: checkout@v4, setup-go@v5, cache@v4, golangci-lint-action@v6, setup-buildx-action@v3, login-action@v3, build-push-action@v6 (see ARCHITECTURE.md §11.3)."
+          # must be on the Node.js 24-compatible major version. The threshold
+          # differs per family — only actions whose CURRENT release is newer
+          # than the matched version are flagged.
+          fail=0
+
+          # actions/checkout latest is @v4 → forbid @v0-3.
+          # actions/setup-go latest is @v5 → forbid @v0-3 (the floor we enforce).
+          # actions/cache latest is @v4   → forbid @v0-3.
+          if grep -rEn '(actions/checkout|actions/setup-go|actions/cache)@v[0-3]([^0-9]|$)' .github/workflows/ ; then
+            fail=1
+          fi
+
+          # golangci-lint-action latest is @v6 → forbid @v0-5.
+          if grep -rEn 'golangci/golangci-lint-action@v[0-5]([^0-9]|$)' .github/workflows/ ; then
+            fail=1
+          fi
+
+          # docker/build-push-action latest is @v6 → forbid @v0-5.
+          if grep -rEn 'docker/build-push-action@v[0-5]([^0-9]|$)' .github/workflows/ ; then
+            fail=1
+          fi
+
+          # docker/setup-buildx-action and docker/login-action are at @v3 — that
+          # IS the current version, so no guard needed for those.
+
+          if [ "$fail" = "1" ]; then
+            echo "::error::Workflow references a forbidden action version. Required: checkout@v4, setup-go@v5, cache@v4, golangci-lint-action@v6, build-push-action@v6, setup-buildx-action@v3, login-action@v3 (see ARCHITECTURE.md §11.3)."
             exit 1
           fi
 

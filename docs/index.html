@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIFStudio — Self-Hosted Interactive Fiction Platform</title>
+  <meta name="description" content="Discover, play, and author Interactive Fiction. Self-hosted via Docker Compose. Z-machine, Glulx, TADS, and Inform 7 — all in the browser.">
+  <meta property="og:title" content="AIFStudio">
+  <meta property="og:description" content="Self-hosted Interactive Fiction platform. Play Z-machine, Glulx, and TADS stories in the browser. Author with Inform 7 and AI assistance.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://aifstudio.org">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:     #78ffaf;
+      --green-dim: rgba(120,255,175,0.5);
+      --green-faint: rgba(120,255,175,0.12);
+      --green-glow: rgba(120,255,175,0.08);
+      --bg:        #010805;
+      --blue:      #7ec8e3;
+      --red:       #ff5555;
+      --mono:      'VT323', 'Share Tech Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--green);
+      font-family: var(--mono);
+      font-size: 18px;
+      line-height: 1.6;
+      background-image: repeating-linear-gradient(
+        to bottom, transparent 0px, transparent 2px, rgba(0,0,0,0.10) 3px
+      );
+      min-height: 100vh;
+    }
+
+    a { color: var(--green); text-decoration: none; }
+    a:hover { text-decoration: underline; color: #fff; }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 2rem;
+      background: rgba(1,8,5,0.92);
+      border-bottom: 1px solid rgba(120,255,175,0.18);
+      backdrop-filter: blur(4px);
+    }
+    .nav-logo {
+      font-size: 26px;
+      letter-spacing: 2px;
+      color: var(--green);
+      font-weight: normal;
+    }
+    .nav-logo span { color: var(--green-dim); }
+    .nav-links { display: flex; gap: 2rem; font-size: 18px; letter-spacing: 1px; }
+    .nav-links a { color: var(--green-dim); }
+    .nav-links a:hover { color: var(--green); text-decoration: none; }
+
+    /* ── HERO ── */
+    .hero {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 5rem 2rem 4rem;
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-block;
+      font-size: 15px;
+      letter-spacing: 2px;
+      color: var(--green-dim);
+      border: 1px solid rgba(120,255,175,0.2);
+      padding: 0.25rem 0.9rem;
+      margin-bottom: 1.5rem;
+      text-transform: uppercase;
+    }
+    .hero h1 {
+      font-size: clamp(52px, 10vw, 96px);
+      letter-spacing: 6px;
+      line-height: 1.1;
+      text-shadow: 0 0 40px rgba(120,255,175,0.3);
+      margin-bottom: 0.5rem;
+    }
+    .hero-sub {
+      font-size: clamp(22px, 4vw, 30px);
+      color: var(--green-dim);
+      letter-spacing: 2px;
+      margin-bottom: 2rem;
+    }
+    .hero-desc {
+      font-size: 20px;
+      color: rgba(120,255,175,0.7);
+      max-width: 640px;
+      margin: 0 auto 2.5rem;
+      letter-spacing: 0.5px;
+      line-height: 1.7;
+    }
+    .hero-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      font-family: var(--mono);
+      font-size: 20px;
+      letter-spacing: 2px;
+      padding: 0.55rem 1.6rem;
+      border: 1px solid rgba(120,255,175,0.5);
+      background: var(--green-faint);
+      color: var(--green);
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: background 0.15s, border-color 0.15s;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .btn:hover { background: rgba(120,255,175,0.2); border-color: var(--green); text-decoration: none; color: #fff; }
+    .btn-ghost { background: transparent; border-color: rgba(120,255,175,0.25); color: var(--green-dim); }
+    .btn-ghost:hover { border-color: var(--green); color: var(--green); }
+
+    /* ── DIVIDER ── */
+    .divider {
+      text-align: center;
+      color: rgba(120,255,175,0.2);
+      letter-spacing: 2px;
+      font-size: 16px;
+      padding: 0.5rem 0;
+      overflow: hidden;
+    }
+
+    /* ── SECTIONS ── */
+    section {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 4rem 2rem;
+    }
+    .section-label {
+      font-size: 14px;
+      letter-spacing: 3px;
+      color: var(--blue);
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+    .section-title {
+      font-size: clamp(30px, 5vw, 48px);
+      letter-spacing: 3px;
+      margin-bottom: 1rem;
+      text-shadow: 0 0 20px rgba(120,255,175,0.2);
+    }
+    .section-body {
+      font-size: 19px;
+      color: rgba(120,255,175,0.7);
+      max-width: 640px;
+      line-height: 1.8;
+    }
+
+    /* ── SCREENSHOT PLACEHOLDERS ── */
+    .screenshots {
+      display: flex;
+      flex-direction: column;
+      gap: 3rem;
+      margin-top: 3rem;
+    }
+    .screenshot-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      align-items: center;
+    }
+    .screenshot-row.reverse { direction: rtl; }
+    .screenshot-row.reverse > * { direction: ltr; }
+    .screenshot-placeholder {
+      aspect-ratio: 16/10;
+      border: 1px dashed rgba(120,255,175,0.3);
+      background: rgba(120,255,175,0.03);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      color: rgba(120,255,175,0.25);
+      font-size: 16px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      position: relative;
+      overflow: hidden;
+    }
+    .screenshot-placeholder::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 20px,
+        rgba(120,255,175,0.02) 20px,
+        rgba(120,255,175,0.02) 21px
+      );
+    }
+    .screenshot-placeholder .ph-icon {
+      font-size: 40px;
+      opacity: 0.3;
+    }
+    .screenshot-placeholder img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      position: absolute;
+      inset: 0;
+    }
+    .screenshot-caption { padding: 0.5rem 0; }
+    .screenshot-caption h3 {
+      font-size: 26px;
+      letter-spacing: 2px;
+      margin-bottom: 0.5rem;
+    }
+    .screenshot-caption p {
+      font-size: 18px;
+      color: rgba(120,255,175,0.6);
+      line-height: 1.7;
+    }
+
+    /* ── FEATURES GRID ── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-top: 2.5rem;
+    }
+    .feature-card {
+      border: 1px solid rgba(120,255,175,0.15);
+      background: var(--green-glow);
+      padding: 1.5rem;
+    }
+    .feature-card:hover { border-color: rgba(120,255,175,0.35); background: var(--green-faint); }
+    .feature-icon {
+      font-size: 28px;
+      margin-bottom: 0.75rem;
+      opacity: 0.7;
+    }
+    .feature-title {
+      font-size: 22px;
+      letter-spacing: 1px;
+      margin-bottom: 0.4rem;
+    }
+    .feature-desc {
+      font-size: 17px;
+      color: rgba(120,255,175,0.55);
+      line-height: 1.6;
+    }
+
+    /* ── QUICKSTART ── */
+    .quickstart-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .qs-step {
+      display: grid;
+      grid-template-columns: 2rem 1fr;
+      gap: 1rem;
+      align-items: start;
+    }
+    .qs-num {
+      font-size: 20px;
+      color: var(--blue);
+      letter-spacing: 1px;
+      padding-top: 0.1rem;
+    }
+    .qs-content h4 {
+      font-size: 22px;
+      letter-spacing: 1px;
+      margin-bottom: 0.4rem;
+    }
+    .qs-content p {
+      font-size: 17px;
+      color: rgba(120,255,175,0.55);
+      margin-bottom: 0.5rem;
+    }
+    pre {
+      background: rgba(0,0,0,0.5);
+      border: 1px solid rgba(120,255,175,0.15);
+      padding: 0.75rem 1rem;
+      font-family: var(--mono);
+      font-size: 17px;
+      color: var(--green);
+      overflow-x: auto;
+      line-height: 1.6;
+    }
+    pre .comment { color: rgba(120,255,175,0.35); }
+
+    /* ── FORMATS ── */
+    .formats-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+    }
+    .format-tag {
+      font-size: 17px;
+      letter-spacing: 1px;
+      border: 1px solid rgba(120,255,175,0.25);
+      padding: 0.2rem 0.75rem;
+      color: var(--green-dim);
+      background: var(--green-glow);
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid rgba(120,255,175,0.12);
+      padding: 2rem;
+      text-align: center;
+      font-size: 16px;
+      color: rgba(120,255,175,0.3);
+      letter-spacing: 1px;
+    }
+    footer a { color: rgba(120,255,175,0.45); }
+    footer a:hover { color: var(--green); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 700px) {
+      nav { padding: 0.6rem 1rem; }
+      .nav-links { gap: 1rem; font-size: 16px; }
+      .hero { padding: 3rem 1rem 2.5rem; }
+      section { padding: 2.5rem 1rem; }
+      .screenshot-row { grid-template-columns: 1fr; direction: ltr; }
+      .screenshot-row.reverse { direction: ltr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── NAV ──────────────────────────────────────────────────── -->
+<nav>
+  <div class="nav-logo">&gt; AIF<span>STUDIO</span></div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#screenshots">Screenshots</a>
+    <a href="#quickstart">Quick Start</a>
+    <a href="https://github.com/vpoluyaktov/aifstudio">GitHub</a>
+  </div>
+</nav>
+
+<!-- ── HERO ──────────────────────────────────────────────────── -->
+<div class="hero">
+  <div class="hero-badge">Self-hosted &nbsp;·&nbsp; Open source &nbsp;·&nbsp; Docker Compose</div>
+  <h1>AIFSTUDIO</h1>
+  <div class="hero-sub">Interactive Fiction, your way</div>
+  <p class="hero-desc">
+    Discover, play, and author Interactive Fiction — all in your browser,
+    on your own server. Z-machine, Glulx, and TADS out of the box.
+    Inform 7 authoring with AI assistance.
+  </p>
+  <div class="hero-actions">
+    <a class="btn" href="#quickstart">[ DEPLOY NOW ]</a>
+    <a class="btn btn-ghost" href="https://github.com/vpoluyaktov/aifstudio">[ VIEW SOURCE ]</a>
+  </div>
+</div>
+
+<div class="divider">
+  ──────────────────────────────────────────────────────────────────────────────
+</div>
+
+<!-- ── FEATURES ──────────────────────────────────────────────── -->
+<section id="features">
+  <div class="section-label">&gt; CAPABILITIES</div>
+  <div class="section-title">Everything you need to run IF</div>
+  <p class="section-body">
+    A complete platform for interactive fiction — from browsing the IFDB catalogue
+    to compiling your own Inform 7 stories, all running on your own hardware.
+  </p>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">◈</div>
+      <div class="feature-title">IFDB Catalogue</div>
+      <div class="feature-desc">Browse thousands of published IF titles from the Interactive Fiction Database, filtered to formats your server can run.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">▶</div>
+      <div class="feature-title">Play in the Browser</div>
+      <div class="feature-desc">Z-machine (.z3–.z8, .zblorb), Glulx (.ulx, .gblorb), and TADS 2/3 (.gam, .t3) via dfrotz, glulxe, and frob.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">◉</div>
+      <div class="feature-title">Durable Sessions</div>
+      <div class="feature-desc">Save files and transcripts persisted to local storage. Resume any game in under 200 ms — even after container restarts.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">✦</div>
+      <div class="feature-title">Inform 7 Authoring</div>
+      <div class="feature-desc">Create Inform 7 projects, compile on the server, and play your own builds immediately — no local toolchain needed.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">◆</div>
+      <div class="feature-title">AI Workspace</div>
+      <div class="feature-desc">Write and iterate on Inform 7 source with an AI assistant. Generate story text, puzzle logic, and room descriptions.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">◎</div>
+      <div class="feature-title">Voice I/O</div>
+      <div class="feature-desc">Optional Web Speech API integration. TTS reads interpreter output; STT captures commands hands-free. Toggles persist per browser.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">▣</div>
+      <div class="feature-title">Multi-User</div>
+      <div class="feature-desc">Local session auth with bcrypt passwords. Each user has their own run history, projects, and save files.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">◇</div>
+      <div class="feature-title">Zero Cloud Dependencies</div>
+      <div class="feature-desc">SQLite for metadata. Local filesystem for storage. No GCP, no Firebase, no S3. Runs on any machine with Docker.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">▷</div>
+      <div class="feature-title">Community Builds</div>
+      <div class="feature-desc">Share compiled stories with other users on the same instance. Browse and play what others have authored.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SUPPORTED FORMATS ──────────────────────────────────────── -->
+<div class="divider">──────────────────────────────────────────────────────────────────</div>
+<section>
+  <div class="section-label">&gt; SUPPORTED FORMATS</div>
+  <div class="section-title">Broad format support</div>
+  <p class="section-body">
+    Powered by the most widely-used open-source IF interpreters.
+    If IFDB knows about it and it runs on one of these engines, AIFStudio can play it.
+  </p>
+  <div class="formats-row">
+    <div class="format-tag">.z3 / .z4 / .z5</div>
+    <div class="format-tag">.z6 / .z7 / .z8</div>
+    <div class="format-tag">.zblorb</div>
+    <div class="format-tag">.ulx</div>
+    <div class="format-tag">.gblorb</div>
+    <div class="format-tag">.gam (TADS 2)</div>
+    <div class="format-tag">.t3 (TADS 3)</div>
+    <div class="format-tag">Inform 7 source</div>
+  </div>
+</section>
+
+<!-- ── SCREENSHOTS ────────────────────────────────────────────── -->
+<div class="divider">──────────────────────────────────────────────────────────────────</div>
+<section id="screenshots">
+  <div class="section-label">&gt; SCREENSHOTS</div>
+  <div class="section-title">See it in action</div>
+
+  <div class="screenshots">
+
+    <div class="screenshot-row">
+      <div class="screenshot-placeholder">
+        <div class="ph-icon">◈</div>
+        <div>SCREENSHOT PLACEHOLDER</div>
+        <div style="font-size:13px; letter-spacing:1px;">IFDB CATALOGUE VIEW</div>
+      </div>
+      <div class="screenshot-caption">
+        <h3>IFDB Catalogue</h3>
+        <p>Browse thousands of published Interactive Fiction titles. Filter by genre, author, or format. One click to start playing.</p>
+      </div>
+    </div>
+
+    <div class="screenshot-row reverse">
+      <div class="screenshot-placeholder">
+        <div class="ph-icon">▶</div>
+        <div>SCREENSHOT PLACEHOLDER</div>
+        <div style="font-size:13px; letter-spacing:1px;">GAME PLAY VIEW</div>
+      </div>
+      <div class="screenshot-caption">
+        <h3>Play in the Browser</h3>
+        <p>A faithful terminal-style interface for the classic IF experience. Full keyboard control, save/restore, and transcript download.</p>
+      </div>
+    </div>
+
+    <div class="screenshot-row">
+      <div class="screenshot-placeholder">
+        <div class="ph-icon">✦</div>
+        <div>SCREENSHOT PLACEHOLDER</div>
+        <div style="font-size:13px; letter-spacing:1px;">INFORM 7 AI WORKSPACE</div>
+      </div>
+      <div class="screenshot-caption">
+        <h3>AI Authoring Workspace</h3>
+        <p>Write Inform 7 source with AI assistance. Compile and play your story without leaving the browser.</p>
+      </div>
+    </div>
+
+    <div class="screenshot-row reverse">
+      <div class="screenshot-placeholder">
+        <div class="ph-icon">◉</div>
+        <div>SCREENSHOT PLACEHOLDER</div>
+        <div style="font-size:13px; letter-spacing:1px;">MY GAMES / HISTORY</div>
+      </div>
+      <div class="screenshot-caption">
+        <h3>Game History</h3>
+        <p>Every session is saved. Pick up exactly where you left off — continue, restart, or delete any game from your history.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── QUICK START ────────────────────────────────────────────── -->
+<div class="divider">──────────────────────────────────────────────────────────────────</div>
+<section id="quickstart">
+  <div class="section-label">&gt; DEPLOYMENT</div>
+  <div class="section-title">Up in four commands</div>
+  <p class="section-body">
+    AIFStudio ships as a single Docker image. All you need is Docker Compose.
+  </p>
+
+  <div class="quickstart-steps">
+    <div class="qs-step">
+      <div class="qs-num">01</div>
+      <div class="qs-content">
+        <h4>Clone and configure</h4>
+        <p>Copy the example config and set your OpenAI key if you want AI features.</p>
+        <pre>git clone https://github.com/vpoluyaktov/aifstudio.git
+cd aifstudio
+cp .env.example .env
+<span class="comment"># edit .env — set OPENAI_API_KEY</span></pre>
+      </div>
+    </div>
+    <div class="qs-step">
+      <div class="qs-num">02</div>
+      <div class="qs-content">
+        <h4>Create data directories</h4>
+        <p>SQLite and file storage live on the host so data survives container updates.</p>
+        <pre>mkdir -p data/db data/storage
+sudo chown -R 999:999 data/</pre>
+      </div>
+    </div>
+    <div class="qs-step">
+      <div class="qs-num">03</div>
+      <div class="qs-content">
+        <h4>Start the service</h4>
+        <pre>docker compose up -d</pre>
+      </div>
+    </div>
+    <div class="qs-step">
+      <div class="qs-num">04</div>
+      <div class="qs-content">
+        <h4>Open and register</h4>
+        <p>Navigate to the app, create your account, and start playing.</p>
+        <pre>http://localhost:9901/register</pre>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top: 2.5rem; padding: 1.25rem; border: 1px solid rgba(120,255,175,0.2); background: var(--green-glow);">
+    <div style="font-size:14px; letter-spacing:2px; color:var(--blue); margin-bottom:0.5rem;">TO UPDATE</div>
+    <pre>docker compose pull &amp;&amp; docker compose up -d</pre>
+  </div>
+</section>
+
+<!-- ── FOOTER ──────────────────────────────────────────────────── -->
+<div class="divider">──────────────────────────────────────────────────────────────────</div>
+<footer>
+  <div style="font-size:22px; letter-spacing:3px; color:rgba(120,255,175,0.5); margin-bottom:0.75rem;">&gt; AIFSTUDIO</div>
+  <div style="margin-bottom:0.5rem;">
+    <a href="https://github.com/vpoluyaktov/aifstudio">GitHub</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/vpoluyaktov/aifstudio/blob/main/ARCHITECTURE.md">Architecture</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/vpoluyaktov/aifstudio/blob/main/README.md">Docs</a>
+  </div>
+  <div>AIFSTUDIO SYS &nbsp;::&nbsp; SELF-HOSTED INTERACTIVE FICTION PLATFORM</div>
+</footer>
+
+</body>
+</html>

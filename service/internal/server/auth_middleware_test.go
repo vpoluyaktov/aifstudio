@@ -24,6 +24,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -745,6 +746,230 @@ func TestFirebaseUIDIsOpaqueString(t *testing.T) {
 // ─────────────────────────────────────────────────────────────────────────────
 // isAllowlisted pure-function coverage via middleware behaviour
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Session cookie auth tests (§4 of ARCHITECTURE.md — real SessionAuth)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Unlike all other tests in this file (which use MockVerifier + Bearer header),
+// these tests exercise the real SessionAuth backed by a temporary SQLiteStore.
+// They verify the production cookie path end-to-end.
+
+// newTSWithSessionAuth creates a test HTTP server using a real *auth.SessionAuth
+// backed by a temporary SQLite database. This is the production auth path.
+// The returned *auth.SessionAuth is available for direct Register/Login calls.
+func newTSWithSessionAuth(t *testing.T) (*httptest.Server, *auth.SessionAuth) {
+	t.Helper()
+	dir := t.TempDir()
+	blob := store.NewLocalBlobStore(filepath.Join(dir, "storage"))
+	dbPath := filepath.Join(dir, "session_auth_test.db")
+	st, err := store.NewSQLiteStore(context.Background(), dbPath, blob)
+	if err != nil {
+		t.Fatalf("NewSQLiteStore: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	sa := auth.NewSessionAuth(st, 24*time.Hour)
+	cfg := testConfig()
+	srv := server.New(cfg, st, nil, nil, nil, sa)
+	ts := httptest.NewServer(srv.SetupRoutes())
+	t.Cleanup(ts.Close)
+	return ts, sa
+}
+
+// sessionCookieFromResponse returns the value of the "aifstudio_session" cookie
+// set by the response, or "" if not present.
+func sessionCookieFromResponse(resp *http.Response) string {
+	for _, c := range resp.Cookies() {
+		if c.Name == "aifstudio_session" {
+			return c.Value
+		}
+	}
+	return ""
+}
+
+// registerTestUserHTTP POSTs to /api/auth/register and returns the session cookie
+// value. Fails the test if the request fails or the status is not 201.
+func registerTestUserHTTP(t *testing.T, ts *httptest.Server, email, password, name string) string {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{
+		"email":       email,
+		"password":    password,
+		"displayName": name,
+	})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /api/auth/register: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("register status = %d; want 201\nbody: %s", resp.StatusCode, b)
+	}
+	cookie := sessionCookieFromResponse(resp)
+	if cookie == "" {
+		t.Fatal("register: no aifstudio_session cookie in response")
+	}
+	return cookie
+}
+
+// TestSessionCookieAuth_NoCookie verifies that a protected /api route returns 401
+// with the standard error shape when no session cookie is present.
+func TestSessionCookieAuth_NoCookie(t *testing.T) {
+	ts, _ := newTSWithSessionAuth(t)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/runs/by-user", nil)
+	// No cookie set.
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /api/runs/by-user: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d; want 401 (no cookie)\nbody: %s", resp.StatusCode, b)
+	}
+	assertErrorShape(t, resp.Body)
+}
+
+// TestSessionCookieAuth_ValidCookie verifies that a session cookie issued by
+// /api/auth/register grants access to protected routes.
+func TestSessionCookieAuth_ValidCookie(t *testing.T) {
+	ts, _ := newTSWithSessionAuth(t)
+
+	cookie := registerTestUserHTTP(t, ts, "alice@example.com", "password123", "Alice")
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/runs/by-user", nil)
+	req.AddCookie(&http.Cookie{Name: "aifstudio_session", Value: cookie})
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /api/runs/by-user: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		t.Errorf("status = %d; want 200 (valid cookie)\nbody: %s", resp.StatusCode, b)
+	}
+}
+
+// TestSessionCookieAuth_InvalidCookie verifies that an unrecognised or malformed
+// session token is rejected with 401.
+func TestSessionCookieAuth_InvalidCookie(t *testing.T) {
+	ts, _ := newTSWithSessionAuth(t)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/runs/by-user", nil)
+	req.AddCookie(&http.Cookie{Name: "aifstudio_session", Value: "notavalidtoken"})
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /api/runs/by-user (invalid cookie): %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d; want 401 (invalid cookie)\nbody: %s", resp.StatusCode, b)
+	}
+	assertErrorShape(t, resp.Body)
+}
+
+// TestSessionCookieAuth_LogoutInvalidatesSession verifies that after a successful
+// POST /api/auth/logout, the same session cookie is rejected on subsequent requests.
+func TestSessionCookieAuth_LogoutInvalidatesSession(t *testing.T) {
+	ts, _ := newTSWithSessionAuth(t)
+	cookie := registerTestUserHTTP(t, ts, "bob@example.com", "password123", "Bob")
+
+	// Confirm the cookie works before logout.
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/runs/by-user", nil)
+	req.AddCookie(&http.Cookie{Name: "aifstudio_session", Value: cookie})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET before logout: %v", err)
+	}
+	io.Copy(io.Discard, resp.Body) //nolint:errcheck
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("before logout: status = %d; want 200", resp.StatusCode)
+	}
+
+	// POST /api/auth/logout (requires session cookie — not on allow-list).
+	logoutReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/logout", nil)
+	logoutReq.AddCookie(&http.Cookie{Name: "aifstudio_session", Value: cookie})
+	logoutResp, err := http.DefaultClient.Do(logoutReq)
+	if err != nil {
+		t.Fatalf("POST /api/auth/logout: %v", err)
+	}
+	io.Copy(io.Discard, logoutResp.Body) //nolint:errcheck
+	logoutResp.Body.Close()
+	if logoutResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("logout status = %d; want 204", logoutResp.StatusCode)
+	}
+
+	// Same cookie must now be rejected.
+	req2, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/runs/by-user", nil)
+	req2.AddCookie(&http.Cookie{Name: "aifstudio_session", Value: cookie})
+	resp2, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatalf("GET after logout: %v", err)
+	}
+	defer resp2.Body.Close()
+
+	if resp2.StatusCode != http.StatusUnauthorized {
+		b, _ := io.ReadAll(resp2.Body)
+		t.Errorf("after logout: status = %d; want 401 (session invalidated)\nbody: %s",
+			resp2.StatusCode, b)
+	}
+}
+
+// TestSessionCookieAuth_LoginAndAccess verifies that /api/auth/login also issues
+// a valid cookie after a successful password check.
+func TestSessionCookieAuth_LoginAndAccess(t *testing.T) {
+	ts, _ := newTSWithSessionAuth(t)
+
+	// Register first (creates the user).
+	_ = registerTestUserHTTP(t, ts, "carol@example.com", "letmein12", "Carol")
+
+	// Now login with the same credentials.
+	loginBody, _ := json.Marshal(map[string]string{
+		"email":    "carol@example.com",
+		"password": "letmein12",
+	})
+	loginReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/login",
+		bytes.NewReader(loginBody))
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginResp, err := http.DefaultClient.Do(loginReq)
+	if err != nil {
+		t.Fatalf("POST /api/auth/login: %v", err)
+	}
+	defer loginResp.Body.Close()
+	if loginResp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(loginResp.Body)
+		t.Fatalf("login status = %d; want 200\nbody: %s", loginResp.StatusCode, b)
+	}
+
+	loginCookie := sessionCookieFromResponse(loginResp)
+	if loginCookie == "" {
+		t.Fatal("login: no aifstudio_session cookie in response")
+	}
+
+	// The login-issued cookie should grant access to protected routes.
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/runs/by-user", nil)
+	req.AddCookie(&http.Cookie{Name: "aifstudio_session", Value: loginCookie})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /api/runs/by-user with login cookie: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		t.Errorf("status = %d; want 200 (login-issued cookie)\nbody: %s", resp.StatusCode, b)
+	}
+}
 
 // TestAllowListEdgeCases covers boundary inputs for isAllowlisted (§22.5.3):
 // exact path matches, static prefix, and paths that are similar but not listed.

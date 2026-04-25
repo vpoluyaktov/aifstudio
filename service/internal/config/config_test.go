@@ -1,7 +1,9 @@
 package config
 
 import (
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -98,5 +100,50 @@ func TestLoadBadDuration(t *testing.T) {
 	_, err := Load()
 	if err == nil {
 		t.Error("expected error for invalid duration, got nil")
+	}
+}
+
+// TestEnvExampleDrift guards against .env.example and config.go falling out of
+// sync. Every KEY= variable declared in .env.example must appear as a string
+// literal in config.go (e.g. getEnvOrDefault("KEY", …) or os.Getenv("KEY")).
+//
+// When you add a new env var:
+//  1. Add it to .env.example (with a comment and a default value)
+//  2. Add the corresponding getEnvOrDefault / parseDuration / etc. call in config.go
+//  3. This test will pass only when both files are in sync.
+func TestEnvExampleDrift(t *testing.T) {
+	// Working directory during go test is the package directory
+	// (service/internal/config/), so ../../../ reaches the repo root.
+	envExampleBytes, err := os.ReadFile("../../../.env.example")
+	if err != nil {
+		t.Fatalf("read .env.example: %v", err)
+	}
+
+	configGoBytes, err := os.ReadFile("config.go")
+	if err != nil {
+		t.Fatalf("read config.go: %v", err)
+	}
+	configGoStr := string(configGoBytes)
+
+	for _, line := range strings.Split(string(envExampleBytes), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, _, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+
+		// Each key must appear as a quoted string literal in config.go.
+		needle := fmt.Sprintf("%q", key) // e.g. `"OPENAI_API_KEY"`
+		if !strings.Contains(configGoStr, needle) {
+			t.Errorf(".env.example key %s is not referenced in config.go "+
+				"(expected to find %s) — drift detected", key, needle)
+		}
 	}
 }

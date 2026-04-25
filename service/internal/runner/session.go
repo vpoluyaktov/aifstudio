@@ -464,6 +464,12 @@ func (s *Session) resolve(ctx context.Context) (string, error) {
 	s.workDir = workDir
 	s.mu.Unlock()
 
+	// Build-sourced runs: fetch the artifact directly from local blob storage
+	// (store.DownloadBlob) rather than via an external HTTP URL.
+	if run.SourceType == "build" {
+		return s.resolveBuildArtifact(ctx, run, workDir)
+	}
+
 	var artifactURL string
 	switch run.SourceType {
 	case "ifdb":
@@ -472,8 +478,6 @@ func (s *Session) resolve(ctx context.Context) (string, error) {
 			return "", fmt.Errorf("internal: ifdb run has no artifact URL")
 		}
 	case "url":
-		artifactURL = run.ArtifactURL
-	case "build":
 		artifactURL = run.ArtifactURL
 	default:
 		return "", fmt.Errorf("unknown sourceType: %s", run.SourceType)
@@ -536,6 +540,43 @@ func (s *Session) downloadSaveFile(ctx context.Context, gcsPath, localPath strin
 	}
 	defer f.Close()
 	return s.st.DownloadBlob(ctx, gcsPath, f)
+}
+
+// resolveBuildArtifact downloads the compiled game artifact for a build-sourced
+// run directly from local blob storage (DownloadBlob) and returns the local file
+// path. This avoids any HTTP round-trip for locally stored builds.
+func (s *Session) resolveBuildArtifact(ctx context.Context, run *store.Run, workDir string) (string, error) {
+	if s.st == nil {
+		return "", fmt.Errorf("build run requires store: no store configured")
+	}
+	if run.BuildID == "" {
+		return "", fmt.Errorf("build run has no BuildID")
+	}
+	b, err := s.st.GetBuild(ctx, run.BuildID)
+	if err != nil {
+		return "", fmt.Errorf("load build %s: %w", run.BuildID, err)
+	}
+	if b == nil {
+		return "", fmt.Errorf("build %s not found", run.BuildID)
+	}
+	if b.ArtifactPath == "" {
+		return "", fmt.Errorf("build %s has no artifact", run.BuildID)
+	}
+	ext := ".ulx"
+	if b.ArtifactFormat != "" {
+		ext = "." + b.ArtifactFormat
+	}
+	localPath := filepath.Join(workDir, "artifact"+ext)
+	f, err := os.Create(localPath)
+	if err != nil {
+		return "", fmt.Errorf("create artifact file: %w", err)
+	}
+	dlErr := s.st.DownloadBlob(ctx, b.ArtifactPath, f)
+	f.Close()
+	if dlErr != nil {
+		return "", fmt.Errorf("download build artifact: %w", dlErr)
+	}
+	return localPath, nil
 }
 
 // kill closes stdin, sends SIGTERM, and waits for the interpreter to exit via done.

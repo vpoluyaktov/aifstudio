@@ -314,3 +314,89 @@ func isWinningOutcome(transcript string) bool {
 	}
 	return true
 }
+
+// handleGetBuildArtifact streams the compiled game artifact to the owner.
+// Route: GET /api/builds/{buildId}/artifact
+func (s *Server) handleGetBuildArtifact(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "auth_required", "authentication required")
+		return
+	}
+	bID := r.PathValue("buildId")
+	if !buildIDRE.MatchString(bID) {
+		writeError(w, http.StatusBadRequest, "invalid_build_id", "build id format invalid")
+		return
+	}
+	if s.store == nil {
+		writeError(w, http.StatusNotFound, "not_found", "build not found")
+		return
+	}
+	b, err := s.store.GetBuild(r.Context(), bID)
+	if err != nil {
+		slog.Error("handleGetBuildArtifact: GetBuild failed", "err", err, "build_id", bID)
+		writeError(w, http.StatusInternalServerError, "internal", "failed to get build")
+		return
+	}
+	if b == nil {
+		writeError(w, http.StatusNotFound, "not_found", "build not found")
+		return
+	}
+	if b.OwnerUID != user.UID {
+		writeError(w, http.StatusForbidden, "forbidden", "not owner")
+		return
+	}
+	if b.ArtifactPath == "" {
+		writeError(w, http.StatusNotFound, "not_found", "artifact not available")
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	if b.ArtifactFormat != "" {
+		w.Header().Set("Content-Disposition", `attachment; filename="artifact.`+b.ArtifactFormat+`"`)
+	}
+	if err := s.store.DownloadBlob(r.Context(), b.ArtifactPath, w); err != nil {
+		slog.Error("handleGetBuildArtifact: DownloadBlob failed", "err", err, "path", b.ArtifactPath)
+		// Headers already sent — can't write a JSON error at this point.
+	}
+}
+
+// handleGetBuildLog streams the build log to the owner.
+// Route: GET /api/builds/{buildId}/log
+func (s *Server) handleGetBuildLog(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "auth_required", "authentication required")
+		return
+	}
+	bID := r.PathValue("buildId")
+	if !buildIDRE.MatchString(bID) {
+		writeError(w, http.StatusBadRequest, "invalid_build_id", "build id format invalid")
+		return
+	}
+	if s.store == nil {
+		writeError(w, http.StatusNotFound, "not_found", "build not found")
+		return
+	}
+	b, err := s.store.GetBuild(r.Context(), bID)
+	if err != nil {
+		slog.Error("handleGetBuildLog: GetBuild failed", "err", err, "build_id", bID)
+		writeError(w, http.StatusInternalServerError, "internal", "failed to get build")
+		return
+	}
+	if b == nil {
+		writeError(w, http.StatusNotFound, "not_found", "build not found")
+		return
+	}
+	if b.OwnerUID != user.UID {
+		writeError(w, http.StatusForbidden, "forbidden", "not owner")
+		return
+	}
+	if b.LogPath == "" {
+		writeError(w, http.StatusNotFound, "not_found", "log not available")
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	if err := s.store.DownloadBlob(r.Context(), b.LogPath, w); err != nil {
+		slog.Error("handleGetBuildLog: DownloadBlob failed", "err", err, "path", b.LogPath)
+	}
+}

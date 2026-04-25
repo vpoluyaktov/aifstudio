@@ -425,16 +425,12 @@ func (s *Server) handleGetBuild(w http.ResponseWriter, r *http.Request) {
 
 	resp := buildToResponse(b)
 
-	// Generate signed URLs.
-	if b.ArtifactPath != "" && s.store != nil {
-		if su, err := s.store.SignedReadURL(r.Context(), b.ArtifactPath, time.Hour); err == nil {
-			resp.ArtifactURL = su.URL
-		}
+	// Direct-serve URLs — files are streamed by owner-gated GET handlers.
+	if b.ArtifactPath != "" {
+		resp.ArtifactURL = "/api/builds/" + bID + "/artifact"
 	}
-	if b.LogPath != "" && s.store != nil {
-		if su, err := s.store.SignedReadURL(r.Context(), b.LogPath, time.Hour); err == nil {
-			resp.LogURL = su.URL
-		}
+	if b.LogPath != "" {
+		resp.LogURL = "/api/builds/" + bID + "/log"
 	}
 
 	// Compute HasTest: read the project source from GCS and scan for "Test me with "

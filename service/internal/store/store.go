@@ -112,13 +112,6 @@ type CachedGame struct {
 	ExpiresAt time.Time
 }
 
-// SignedURL holds a time-limited URL. Retained for backward compatibility with
-// handler code that has not yet been migrated to same-origin paths.
-// Deprecated: new code should use same-origin /api/* routes to stream blobs.
-type SignedURL struct {
-	URL       string
-	ExpiresAt time.Time
-}
 
 // Store is the full persistence surface used by handlers and SessionAuth.
 // SQLiteStore (sqlite.go + local_blob.go) is the production implementation.
@@ -248,11 +241,6 @@ type Store interface {
 
 	UploadBlob(ctx context.Context, path, contentType string, r io.Reader) error
 	DownloadBlob(ctx context.Context, path string, w io.Writer) error
-
-	// SignedReadURL is a deprecated no-op retained for handler backward
-	// compatibility. Returns an empty SignedURL.
-	// Deprecated: use same-origin /api/* routes to stream blobs.
-	SignedReadURL(ctx context.Context, path string, ttl time.Duration) (SignedURL, error)
 
 	// DeleteBlobPrefix removes every file under the given path prefix.
 	// Returns the count deleted.

@@ -211,10 +211,7 @@ func (s *Server) handleGetRun(w http.ResponseWriter, r *http.Request) {
 
 	resp := runToResponse(run)
 	if run.TranscriptPath != "" && run.Status == runner.StatusFinished {
-		su, err := s.store.SignedReadURL(r.Context(), run.TranscriptPath, time.Hour)
-		if err == nil {
-			resp.TranscriptURL = su.URL
-		}
+		resp.TranscriptURL = "/api/runs/" + id + "/transcript"
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -265,23 +262,8 @@ func (s *Server) handleRunStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For build-sourced runs the ArtifactURL is not stored — resolve a fresh
-	// signed URL from the build's GCS artifact path at play time.
-	if run.SourceType == "build" && run.BuildID != "" {
-		build, berr := s.store.GetBuild(r.Context(), run.BuildID)
-		if berr != nil || build == nil {
-			slog.Error("handleRunStart: GetBuild failed", "err", berr, "build_id", run.BuildID)
-			writeError(w, http.StatusInternalServerError, "internal", "failed to load build for run")
-			return
-		}
-		su, serr := s.store.SignedReadURL(r.Context(), build.ArtifactPath, 2*time.Hour)
-		if serr != nil {
-			slog.Error("handleRunStart: SignedReadURL failed", "err", serr, "path", build.ArtifactPath)
-			writeError(w, http.StatusInternalServerError, "internal", "failed to sign artifact URL")
-			return
-		}
-		run.ArtifactURL = su.URL
-	}
+	// Build-sourced runs: the runner fetches the artifact directly from local
+	// blob storage via store.DownloadBlob — no URL resolution needed here.
 
 	// Reuse an alive session if one exists; return its last output so the page
 	// has context without re-spawning (idempotent on page reload).
@@ -605,6 +587,47 @@ func (s *Server) handleRestartRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, runToResponse(newRun))
+}
+
+// handleGetRunTranscript streams the finished-run transcript blob to the owner.
+// Route: GET /api/runs/{id}/transcript
+func (s *Server) handleGetRunTranscript(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "auth_required", "authentication required")
+		return
+	}
+	id := r.PathValue("id")
+	if !runIDRE.MatchString(id) {
+		writeError(w, http.StatusBadRequest, "invalid_id", "id must match ^r-[0-9A-Z]{26}$")
+		return
+	}
+	if s.store == nil {
+		writeError(w, http.StatusNotFound, "not_found", "run not found")
+		return
+	}
+	run, err := s.store.GetRun(r.Context(), id)
+	if err != nil {
+		slog.Error("handleGetRunTranscript: GetRun failed", "err", err, "run_id", id)
+		writeError(w, http.StatusInternalServerError, "internal", "failed to get run")
+		return
+	}
+	if run == nil {
+		writeError(w, http.StatusNotFound, "not_found", "run not found")
+		return
+	}
+	if run.UserID != user.UID {
+		writeError(w, http.StatusForbidden, "forbidden", "run does not belong to you")
+		return
+	}
+	if run.TranscriptPath == "" {
+		writeError(w, http.StatusNotFound, "not_found", "transcript not available")
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	if err := s.store.DownloadBlob(r.Context(), run.TranscriptPath, w); err != nil {
+		slog.Error("handleGetRunTranscript: DownloadBlob failed", "err", err, "path", run.TranscriptPath)
+	}
 }
 
 func runToResponse(r *store.Run) runResponse {

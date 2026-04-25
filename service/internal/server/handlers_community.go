@@ -200,16 +200,9 @@ func (s *Server) handleCommunityPlay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve a signed URL for the build artifact — ArtifactPath is a bare GCS
-	// object path and cannot be used directly as a download URL.
-	su, serr := s.store.SignedReadURL(r.Context(), b.ArtifactPath, 2*time.Hour)
-	if serr != nil {
-		slog.Error("handleCommunityPlay: SignedReadURL failed", "err", serr, "path", b.ArtifactPath)
-		writeError(w, http.StatusInternalServerError, "internal", "failed to sign artifact URL")
-		return
-	}
-
 	// Create a run sourced from the build.
+	// ArtifactURL is intentionally empty — the runner fetches the artifact
+	// directly from local blob storage via store.DownloadBlob.
 	runID := "r-" + strings.ToUpper(ulid.MustNew(ulid.Timestamp(time.Now()), crand.Reader).String())
 	now := time.Now().UTC()
 	run := &store.Run{
@@ -219,7 +212,6 @@ func (s *Server) handleCommunityPlay(w http.ResponseWriter, r *http.Request) {
 		ProjectID:    p.ID,
 		Title:        p.Name,
 		Format:       b.ArtifactFormat,
-		ArtifactURL:  su.URL,
 		UserID:       user.UID,
 		Status:       "pending",
 		CreatedAt:    now,

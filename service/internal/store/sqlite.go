@@ -1064,13 +1064,6 @@ func (s *SQLiteStore) DownloadBlob(ctx context.Context, path string, w io.Writer
 	return s.blob.DownloadBlob(ctx, path, w)
 }
 
-// SignedReadURL is a deprecated no-op stub.
-//
-// Deprecated: use same-origin /api/* routes to stream blobs.
-func (s *SQLiteStore) SignedReadURL(_ context.Context, _ string, _ time.Duration) (SignedURL, error) {
-	return SignedURL{}, nil
-}
-
 func (s *SQLiteStore) DeleteBlobPrefix(ctx context.Context, prefix string) (int, error) {
 	return s.blob.DeleteBlobPrefix(ctx, prefix)
 }

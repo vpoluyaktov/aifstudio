@@ -49,9 +49,6 @@ func (m *mockStore) ListFreshCachedGames(_ context.Context, _ time.Time) ([]*sto
 }
 func (m *mockStore) UploadBlob(_ context.Context, _ string, _ string, _ io.Reader) error   { return nil }
 func (m *mockStore) DownloadBlob(_ context.Context, _ string, _ io.Writer) error           { return nil }
-func (m *mockStore) SignedReadURL(_ context.Context, path string, _ time.Duration) (store.SignedURL, error) {
-	return store.SignedURL{URL: "mock://" + path, ExpiresAt: time.Now().Add(time.Hour)}, nil
-}
 func (m *mockStore) DeleteBlobPrefix(_ context.Context, _ string) (int, error)             { return 0, nil }
 func (m *mockStore) GetProjectSource(_ context.Context, _ string) (string, error)               { return "", nil }
 func (m *mockStore) PutProjectSource(_ context.Context, _, _ string, _ time.Time) error        { return nil }

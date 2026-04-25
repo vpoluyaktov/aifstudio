@@ -117,6 +117,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	mux.HandleFunc("GET /api/runs/by-user", s.handleRunsByUser)
 	mux.HandleFunc("GET /api/runs/{id}", s.handleGetRun)
 	mux.HandleFunc("GET /api/runs/{id}/start", s.handleRunStart)
+	mux.HandleFunc("GET /api/runs/{id}/transcript", s.handleGetRunTranscript)
 	mux.HandleFunc("POST /api/runs/{id}/command", s.handleRunCommand)
 	mux.HandleFunc("POST /api/runs/{id}/suspend", s.handleRunSuspend)
 	mux.HandleFunc("DELETE /api/runs/{id}", s.handleDeleteRun)
@@ -124,7 +125,10 @@ func (s *Server) SetupRoutes() http.Handler {
 
 	// Builds — direct access by build ID (not nested under projects).
 	// POST /api/builds/{buildId}/test runs the game headlessly and streams SSE.
+	// GET  /api/builds/{buildId}/artifact and /log serve blobs to the owner.
 	mux.HandleFunc("POST /api/builds/{buildId}/test", s.handleBuildTest)
+	mux.HandleFunc("GET /api/builds/{buildId}/artifact", s.handleGetBuildArtifact)
+	mux.HandleFunc("GET /api/builds/{buildId}/log", s.handleGetBuildLog)
 
 	// Projects — behind auth (global middleware covers these; no per-handler wrapper).
 	// GET /api/projects must be registered before GET /api/projects/{id} so the

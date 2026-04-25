@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 // LocalBlobStore implements the filesystem blob operations used by SQLiteStore.
@@ -87,14 +86,6 @@ func (b *LocalBlobStore) DownloadBlob(_ context.Context, path string, w io.Write
 		return fmt.Errorf("read blob %s: %w", path, err)
 	}
 	return nil
-}
-
-// SignedReadURL is a deprecated no-op stub retained for handler backward
-// compatibility. Returns an empty SignedURL.
-//
-// Deprecated: use same-origin /api/* routes to stream blobs.
-func (b *LocalBlobStore) SignedReadURL(_ context.Context, _ string, _ time.Duration) (SignedURL, error) {
-	return SignedURL{}, nil
 }
 
 // DeleteBlobPrefix removes every file under the given logical path prefix.

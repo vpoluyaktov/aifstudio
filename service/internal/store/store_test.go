@@ -247,10 +247,6 @@ func (m *MockStore) DownloadBlob(_ context.Context, _ string, _ io.Writer) error
 	return nil
 }
 
-func (m *MockStore) SignedReadURL(_ context.Context, path string, _ time.Duration) (store.SignedURL, error) {
-	return store.SignedURL{URL: "mock://" + path, ExpiresAt: time.Now().Add(time.Hour)}, nil
-}
-
 func (m *MockStore) DeleteBlobPrefix(_ context.Context, _ string) (int, error) {
 	return 0, nil
 }

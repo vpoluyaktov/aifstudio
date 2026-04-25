@@ -305,9 +305,6 @@ func (m *mockStore) DownloadBlob(_ context.Context, _ string, _ io.Writer) error
 	}
 	return nil
 }
-func (m *mockStore) SignedReadURL(_ context.Context, path string, ttl time.Duration) (store.SignedURL, error) {
-	return store.SignedURL{URL: "mock://" + path, ExpiresAt: time.Now().Add(ttl)}, nil
-}
 func (m *mockStore) DeleteBlobPrefix(_ context.Context, prefix string) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

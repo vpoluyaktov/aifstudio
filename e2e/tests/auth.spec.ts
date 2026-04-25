@@ -6,9 +6,9 @@
  */
 import { test, expect } from '@playwright/test';
 
-const BASE = 'https://demo.aifstudio.org';
-const TEST_EMAIL = 'claude@aifstudio.org';
-const TEST_PASSWORD = 'Cl4ude$cr33nsh0t';
+const BASE          = 'https://demo.aifstudio.org';
+const TEST_EMAIL    = process.env.TEST_EMAIL    ?? 'claude@aifstudio.org';
+const TEST_PASSWORD = process.env.TEST_PASSWORD ?? (() => { throw new Error('TEST_PASSWORD env var is required'); })();
 
 // ── Register ─────────────────────────────────────────────────────────────────
 

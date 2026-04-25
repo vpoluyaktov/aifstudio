@@ -8,8 +8,8 @@
 import { test as setup, expect } from '@playwright/test';
 
 const AUTH_FILE = 'auth.json';
-const TEST_EMAIL = 'claude@aifstudio.org';
-const TEST_PASSWORD = 'Cl4ude$cr33nsh0t';
+const TEST_EMAIL    = process.env.TEST_EMAIL    ?? 'claude@aifstudio.org';
+const TEST_PASSWORD = process.env.TEST_PASSWORD ?? (() => { throw new Error('TEST_PASSWORD env var is required'); })();
 
 setup('authenticate via API and save session', async ({ page }) => {
   // POST to the login endpoint using the page-bound request context so that

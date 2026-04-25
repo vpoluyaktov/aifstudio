@@ -3,3 +3,4 @@ playwright-report/
 test-results/
 auth.json
 dist/
+.env

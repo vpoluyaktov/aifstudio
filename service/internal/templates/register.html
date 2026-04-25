@@ -23,13 +23,13 @@
       <div class="auth-field">
         <label for="password">PASSWORD:</label>
         <input id="password" type="password" name="password" required
-               autocomplete="new-password" minlength="6"
-               placeholder="min 6 characters">
+               autocomplete="new-password" minlength="8"
+               placeholder="min 8 characters">
       </div>
       <div class="auth-field">
         <label for="confirmPassword">CONFIRM PASSWORD:</label>
         <input id="confirmPassword" type="password" name="confirmPassword" required
-               autocomplete="new-password" minlength="6"
+               autocomplete="new-password" minlength="8"
                placeholder="repeat password">
       </div>
 
@@ -202,8 +202,8 @@ form.addEventListener('submit', async function () {
     showError('Passwords do not match.');
     return;
   }
-  if (password.length < 6) {
-    showError('Password must be at least 6 characters.');
+  if (password.length < 8) {
+    showError('Password must be at least 8 characters.');
     return;
   }
 
@@ -215,7 +215,7 @@ form.addEventListener('submit', async function () {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       credentials: 'same-origin',
-      body: JSON.stringify({email: email, password: password, display_name: email})
+      body: JSON.stringify({email: email, password: password, displayName: email})
     });
     if (!resp.ok) {
       var data = await resp.json().catch(function () { return {}; });

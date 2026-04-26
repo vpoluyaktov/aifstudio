@@ -646,7 +646,7 @@
           clearStatusAfter(5000);
           hideBuildLog();
         } else {
-          setStatus('✗ Build ' + b.status + (b.errorMessage ? ': ' + b.errorMessage : ''), 'error');
+          setStatus('✗ Build failed — see log below', 'error');
           if (b.logURL) {
             // Fetch log: renders collapsible panel and pre-fills chat with full output.
             // Falls back to errorMessage if the fetch fails.

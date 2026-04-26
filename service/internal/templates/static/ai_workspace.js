@@ -1089,7 +1089,10 @@
   // ── Panel accordion (mobile) ─────────────────────────────────────────────────
 
   function expandPanel(panelEl, btnEl, iconEl) {
-    // Collapse all three panels first
+    // If the target panel is already open, tapping again collapses all (all-collapsed is valid)
+    var alreadyOpen = !panelEl.classList.contains('collapsed');
+
+    // Collapse all three panels
     [wsSourcePanel, wsTestPanel, wsChatPanel].forEach(function(p) {
       if (p) p.classList.add('collapsed');
     });
@@ -1100,10 +1103,13 @@
       var el = document.getElementById(id);
       if (el) el.textContent = '▸';
     });
-    // Expand the target panel
-    panelEl.classList.remove('collapsed');
-    if (btnEl) btnEl.setAttribute('aria-expanded', 'true');
-    if (iconEl) iconEl.textContent = '▾';
+
+    // Only re-expand if the panel was previously closed
+    if (!alreadyOpen) {
+      panelEl.classList.remove('collapsed');
+      if (btnEl) btnEl.setAttribute('aria-expanded', 'true');
+      if (iconEl) iconEl.textContent = '▾';
+    }
   }
 
   // ── History panel ─────────────────────────────────────────────────────────────

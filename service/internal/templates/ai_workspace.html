@@ -450,14 +450,15 @@ body.workspace-page > .footer { display: none; }
     border-right: none;
     border-bottom: 1px solid var(--border);
     overflow: hidden;
-    transition: flex 0.22s ease, max-height 0.22s ease;
+    transition: flex 0.22s ease;
   }
+  /* Collapsed: shrink to header height (content is display:none so no gap) */
   .ws-source-panel.collapsed,
   .ws-test-panel.collapsed,
   .ws-chat-panel.collapsed {
-    flex: 0 0 2.75rem;
-    max-height: 2.75rem;
+    flex: 0 0 auto;
   }
+  /* Expanded: take all remaining space */
   .ws-source-panel:not(.collapsed),
   .ws-test-panel:not(.collapsed),
   .ws-chat-panel:not(.collapsed) {
@@ -471,6 +472,29 @@ body.workspace-page > .footer { display: none; }
   .ws-chat-panel.collapsed .ws-chat-history,
   .ws-chat-panel.collapsed .ws-chat-input-area {
     display: none;
+  }
+  /* Panel headers — min-height keeps them tappable */
+  .ws-panel-header { min-height: 2.75rem; }
+  /* Test panel — match source/chat header appearance */
+  .ws-test-panel {
+    padding: 0;
+    background: transparent;
+    display: flex;
+    flex-direction: column;
+  }
+  .ws-test-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.35rem 0.75rem;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    min-height: 2.75rem;
+  }
+  .ws-test-panel .ws-test-output,
+  .ws-test-panel .ws-test-result {
+    padding: 0.35rem 0.75rem;
   }
   .ws-toolbar-title { max-width: 140px; font-size: 0.85rem; }
 }

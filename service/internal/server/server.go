@@ -188,12 +188,22 @@ func (s *Server) SetupRoutes() http.Handler {
 	// //go:embed static/* directive). fs.Sub strips that prefix so that
 	// FileServer sees "app.js" / "app.css" directly, matching the path left
 	// after http.StripPrefix removes the "/static/" URL prefix.
+	//
+	// Cache-Control: no-cache forces browsers to revalidate on every request.
+	// For embedded FS files the ModTime is zero, so Go may produce a stable
+	// ETag derived only from file size; without this header, a same-size JS
+	// update could serve a 304 from cache even after a new deploy. Versioned
+	// URLs (?v={{.Version}}) bypass ETags entirely by changing the URL, but
+	// no-cache is belt-and-suspenders for all static assets.
 	staticRoot, err := fs.Sub(templates.StaticFS, "static")
 	if err != nil {
 		panic("static assets sub-FS: " + err.Error())
 	}
-	mux.Handle("GET /static/", http.StripPrefix("/static/",
-		http.FileServer(http.FS(staticRoot))))
+	staticHandler := http.StripPrefix("/static/", http.FileServer(http.FS(staticRoot)))
+	mux.Handle("GET /static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		staticHandler.ServeHTTP(w, r)
+	}))
 
 	// Middleware chain (outermost → innermost):
 	// recover → requestID → logging → cors → maxBody → sessionAuthRequired → mux

@@ -132,9 +132,13 @@ func (s *Server) handleAIGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build messages.
+	authorName := user.Name
+	if authorName == "" {
+		authorName = user.Email
+	}
 	userMsg := BuildGenerateUserMessage(p.Name, desc)
 	msgs := []openaiPkg.Message{
-		{Role: "system", Content: BuildSystem(p.Name, desc, sourceBefore)},
+		{Role: "system", Content: BuildSystem(p.Name, desc, authorName, sourceBefore)},
 		{Role: "user", Content: userMsg},
 	}
 
@@ -355,8 +359,12 @@ func (s *Server) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// turn by ~8 KB and pushes early attempts out of the context window
 	// after only 3–4 turns, preventing the model from learning from its
 	// own prior mistakes in the same session.
+	chatAuthorName := user.Name
+	if chatAuthorName == "" {
+		chatAuthorName = user.Email
+	}
 	sysMsgs := []openaiPkg.Message{
-		{Role: "system", Content: BuildSystem(p.Name, p.Description, sourceBefore)},
+		{Role: "system", Content: BuildSystem(p.Name, p.Description, chatAuthorName, sourceBefore)},
 	}
 	budget := 80000
 	var tail []openaiPkg.Message

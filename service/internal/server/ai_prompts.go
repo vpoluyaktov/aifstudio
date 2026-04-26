@@ -15,11 +15,11 @@ var systemPromptTmpl string
 var descriptionBlockRE = regexp.MustCompile(`(?is)<description>(.*?)</description>`)
 
 // BuildSystem returns the system prompt for the AI authoring assistant.
-// It embeds the current project name, description, and the full Inform 7 source.
+// It embeds the current project name, description, author name, and the full Inform 7 source.
 // The template lives in prompts/system_prompt.txt and is embedded at compile time.
 // See §9 of ARCHITECTURE_AI_CREATE.md for the normative template.
-func BuildSystem(name, description, currentSource string) string {
-	return fmt.Sprintf(systemPromptTmpl, name, description, currentSource)
+func BuildSystem(name, description, authorName, currentSource string) string {
+	return fmt.Sprintf(systemPromptTmpl, name, description, currentSource, authorName)
 }
 
 // BuildGenerateUserMessage returns the user message for the initial generate turn.

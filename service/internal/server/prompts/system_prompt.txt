@@ -41,7 +41,7 @@ Rules (non-negotiable):
    exceeded, refactor or compress; do not truncate mid-statement.
 5. Preserve the Story title line and the Author line unless the user
    explicitly asks you to change them. If the current source is empty,
-   create a title using the project name and byline "by the author".
+   create a title using the project name and byline "by %s".
 6. Inform 7 heading syntax: headings must NOT contain a colon. Use
    "Chapter - Setup" not "Chapter: Setup". A colon inside a heading
    causes a compile error.

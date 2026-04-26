@@ -470,6 +470,18 @@ func (s *Session) resolve(ctx context.Context) (string, error) {
 		return s.resolveBuildArtifact(ctx, run, workDir)
 	}
 
+	// IFDB/URL runs: serve from cached blob storage on repeat plays.
+	if run.StoryPath != "" && s.st != nil {
+		if localPath, err := s.resolveFromCache(ctx, run, workDir); err == nil {
+			return localPath, nil
+		}
+		// Blob gone — clear and fall through to re-download.
+		slog.Warn("story cache miss, re-downloading", "run_id", run.ID, "path", run.StoryPath)
+		s.mu.Lock()
+		run.StoryPath = ""
+		s.mu.Unlock()
+	}
+
 	var artifactURL string
 	switch run.SourceType {
 	case "ifdb":
@@ -508,11 +520,26 @@ func (s *Session) resolve(ctx context.Context) (string, error) {
 		return "", err
 	}
 
+	finalPath, err := finalizeArtifact(localPath, ext, workDir)
+	if err != nil {
+		return "", err
+	}
+
+	// Cache the binary so restarts and future plays skip the upstream download.
+	if s.st != nil {
+		s.cacheStory(ctx, run, finalPath)
+	}
+
+	return finalPath, nil
+}
+
+// finalizeArtifact resolves the downloaded file to its playable path: returns
+// the path as-is for recognised binary extensions, or extracts a ZIP archive.
+func finalizeArtifact(localPath, ext, workDir string) (string, error) {
 	lowerExt := strings.ToLower(ext)
 	if lowerExt == ".zblorb" || lowerExt == ".gblorb" || IsBlorb(localPath) {
 		return localPath, nil
 	}
-
 	ifBinaries := map[string]bool{
 		".z3": true, ".z4": true, ".z5": true, ".z6": true,
 		".z7": true, ".z8": true, ".ulx": true,
@@ -521,12 +548,58 @@ func (s *Session) resolve(ctx context.Context) (string, error) {
 	if ifBinaries[lowerExt] {
 		return localPath, nil
 	}
-
 	if lowerExt == ".zip" {
 		return extractZip(localPath, workDir)
 	}
-
 	return "", fmt.Errorf("unsupported_format: unknown extension %s", ext)
+}
+
+// resolveFromCache downloads the cached story binary from blob storage to workDir.
+func (s *Session) resolveFromCache(ctx context.Context, run *store.Run, workDir string) (string, error) {
+	ext := filepath.Ext(run.StoryPath)
+	if ext == "" {
+		ext = ".bin"
+	}
+	localPath := filepath.Join(workDir, "story"+ext)
+	f, err := os.Create(localPath)
+	if err != nil {
+		return "", fmt.Errorf("story cache: create local file: %w", err)
+	}
+	dlErr := s.st.DownloadBlob(ctx, run.StoryPath, f)
+	f.Close()
+	if dlErr != nil {
+		return "", dlErr
+	}
+	slog.Info("story served from cache", "run_id", run.ID, "blob", run.StoryPath)
+	return localPath, nil
+}
+
+// cacheStory uploads the resolved story binary to blob storage and persists the
+// path on the run record so subsequent starts skip the upstream download.
+func (s *Session) cacheStory(ctx context.Context, run *store.Run, localPath string) {
+	ext := filepath.Ext(localPath)
+	if ext == "" {
+		ext = ".bin"
+	}
+	blobPath := "sessions/" + run.ID + "/story" + ext
+	f, err := os.Open(localPath)
+	if err != nil {
+		slog.Warn("story cache: open failed", "run_id", run.ID, "err", err)
+		return
+	}
+	defer f.Close()
+	if err := s.st.UploadBlob(ctx, blobPath, "application/octet-stream", f); err != nil {
+		slog.Warn("story cache: upload failed", "run_id", run.ID, "err", err)
+		return
+	}
+	s.mu.Lock()
+	run.StoryPath = blobPath
+	s.mu.Unlock()
+	if err := s.st.UpdateRun(ctx, run); err != nil {
+		slog.Warn("story cache: UpdateRun failed", "run_id", run.ID, "err", err)
+		return
+	}
+	slog.Info("story cached", "run_id", run.ID, "blob", blobPath)
 }
 
 // downloadSaveFile downloads the GCS save file to localPath.

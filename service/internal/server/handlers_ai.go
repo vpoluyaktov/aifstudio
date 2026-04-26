@@ -502,7 +502,11 @@ func (s *Server) handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePageAIWorkspace(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.AIWorkspace.Execute(w, nil); err != nil {
+	data := pageData{
+		Version:     s.cfg.Version,
+		Environment: s.cfg.Environment,
+	}
+	if err := s.tmpl.AIWorkspace.Execute(w, data); err != nil {
 		slog.Error("handlePageAIWorkspace template", "err", err)
 	}
 }

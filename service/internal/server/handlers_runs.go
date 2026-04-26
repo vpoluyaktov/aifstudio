@@ -527,7 +527,8 @@ func (s *Server) handleDeleteRun(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleRestartRun creates a fresh run copying the source game from an existing run.
+// handleRestartRun resets an existing run in-place so it replays from the
+// beginning without adding a new entry to the history list.
 func (s *Server) handleRestartRun(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
 	if user == nil {
@@ -546,47 +547,52 @@ func (s *Server) handleRestartRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orig, err := s.store.GetRun(r.Context(), id)
+	run, err := s.store.GetRun(r.Context(), id)
 	if err != nil {
 		slog.Error("store.GetRun failed", "err", err, "run_id", id, "handler", "handleRestartRun")
 		writeError(w, http.StatusInternalServerError, "internal", "failed to get run")
 		return
 	}
-	if orig == nil {
+	if run == nil {
 		writeError(w, http.StatusNotFound, "not_found", "run not found")
 		return
 	}
 
 	// Ownership check — no empty-UserID bypass (§22.4.3).
-	if orig.UserID != user.UID {
+	if run.UserID != user.UID {
 		writeError(w, http.StatusForbidden, "forbidden", "run does not belong to you")
 		return
 	}
 
-	newID := "r-" + strings.ToUpper(ulid.MustNew(ulid.Timestamp(time.Now()), crand.Reader).String())
-	now := time.Now().UTC()
-
-	newRun := &store.Run{
-		ID:            newID,
-		SourceType:    orig.SourceType,
-		IFDBId:        orig.IFDBId,
-		Title:         orig.Title,
-		Format:        orig.Format,
-		ArtifactURL:   orig.ArtifactURL,
-		CandidateURLs: orig.CandidateURLs,
-		BuildID:       orig.BuildID,
-		UserID:        user.UID,
-		Status:        runner.StatusPending,
-		CreatedAt:     now,
+	// Kill any live interpreter session so the next /start spawns a fresh one.
+	if s.runner != nil {
+		if existing := s.runner.GetSession(id); existing != nil {
+			existing.Stop()
+			s.runner.RemoveSession(id)
+		}
 	}
 
-	if err := s.store.CreateRun(r.Context(), newRun); err != nil {
-		slog.Error("store.CreateRun failed", "err", err, "run_id", newRun.ID)
-		writeError(w, http.StatusInternalServerError, "internal", "failed to create run")
+	// Reset progress fields; preserve identity, source, and cached story file.
+	run.Status = runner.StatusPending
+	run.TurnCount = 0
+	run.StartedAt = nil
+	run.FinishedAt = nil
+	run.LastActiveAt = nil
+	run.LastSaveAt = nil
+	run.ExitCode = nil
+	run.TranscriptPath = ""
+	run.ErrorCode = ""
+	run.ErrorMessage = ""
+	run.ReconnectCount = 0
+	run.SavePath = "" // clear save so next /start replays from the beginning
+
+	if err := s.store.UpdateRun(r.Context(), run); err != nil {
+		slog.Error("store.UpdateRun failed", "err", err, "run_id", id)
+		writeError(w, http.StatusInternalServerError, "internal", "failed to restart run")
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, runToResponse(newRun))
+	writeJSON(w, http.StatusOK, runToResponse(run))
 }
 
 // handleGetRunTranscript streams the finished-run transcript blob to the owner.

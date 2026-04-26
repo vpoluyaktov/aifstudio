@@ -1973,14 +1973,19 @@ func TestRestartRunSuccess(t *testing.T) {
 	const ownerID = "local-dev" // matches local-mode auth.Verifier fixed UID
 	origRunID := "r-01HXZX5K2V0EQB9M7YPQ300001"
 
+	now := time.Now()
 	_ = ms.CreateRun(context.Background(), &store.Run{
-		ID:         origRunID,
-		UserID:     ownerID,
-		Title:      "Zork I",
-		Format:     "z5",
-		SourceType: "ifdb",
-		IFDBId:     "0dbnusxunq7fw5ro",
-		Status:     "finished",
+		ID:           origRunID,
+		UserID:       ownerID,
+		Title:        "Zork I",
+		Format:       "z5",
+		SourceType:   "ifdb",
+		IFDBId:       "0dbnusxunq7fw5ro",
+		Status:       "finished",
+		TurnCount:    42,
+		StartedAt:    &now,
+		FinishedAt:   &now,
+		LastActiveAt: &now,
 	})
 
 	body := bytes.NewReader([]byte("{}"))
@@ -1992,9 +1997,9 @@ func TestRestartRunSuccess(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
+	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d; want 201\nbody: %s", resp.StatusCode, b)
+		t.Fatalf("status = %d; want 200\nbody: %s", resp.StatusCode, b)
 	}
 	assertContentType(t, resp, "application/json")
 
@@ -2007,18 +2012,14 @@ func TestRestartRunSuccess(t *testing.T) {
 		Status     string `json:"status"`
 		CreatedAt  string `json:"createdAt"`
 		StartURL   string `json:"startURL"`
+		TurnCount  int    `json:"turnCount"`
 	}
 	mustDecode(t, resp.Body, &runResp)
 
-	// New run must have a different ID with r- prefix.
-	if !strings.HasPrefix(runResp.ID, "r-") {
-		t.Errorf("id = %q; want r- prefix", runResp.ID)
+	// Restart resets in-place: same ID, status pending, turn count zeroed.
+	if runResp.ID != origRunID {
+		t.Errorf("id = %q; want original %q", runResp.ID, origRunID)
 	}
-	if runResp.ID == origRunID {
-		t.Error("restarted run should have a new ID, not the original")
-	}
-
-	// Must copy story metadata from original.
 	if runResp.SourceType != "ifdb" {
 		t.Errorf("sourceType = %q; want ifdb", runResp.SourceType)
 	}
@@ -2034,20 +2035,29 @@ func TestRestartRunSuccess(t *testing.T) {
 	if runResp.Status != "pending" {
 		t.Errorf("status = %q; want pending", runResp.Status)
 	}
-	if runResp.CreatedAt == "" {
-		t.Error("createdAt is empty")
+	if runResp.TurnCount != 0 {
+		t.Errorf("turnCount = %d; want 0", runResp.TurnCount)
 	}
-	if !strings.Contains(runResp.StartURL, runResp.ID) {
-		t.Errorf("startURL %q should contain new run ID %q", runResp.StartURL, runResp.ID)
+	if !strings.Contains(runResp.StartURL, origRunID) {
+		t.Errorf("startURL %q should contain run ID %q", runResp.StartURL, origRunID)
 	}
 
-	// Verify new run was persisted to store with correct UserID.
-	newRun, err := ms.GetRun(context.Background(), runResp.ID)
-	if err != nil || newRun == nil {
-		t.Fatalf("new run not found in store: %v", err)
+	// Verify run was updated in store with progress fields reset.
+	updatedRun, err := ms.GetRun(context.Background(), origRunID)
+	if err != nil || updatedRun == nil {
+		t.Fatalf("run not found in store: %v", err)
 	}
-	if newRun.UserID != ownerID {
-		t.Errorf("new run UserID = %q; want %q", newRun.UserID, ownerID)
+	if updatedRun.UserID != ownerID {
+		t.Errorf("run UserID = %q; want %q", updatedRun.UserID, ownerID)
+	}
+	if updatedRun.Status != "pending" {
+		t.Errorf("stored run status = %q; want pending", updatedRun.Status)
+	}
+	if updatedRun.TurnCount != 0 {
+		t.Errorf("stored run TurnCount = %d; want 0", updatedRun.TurnCount)
+	}
+	if updatedRun.StartedAt != nil {
+		t.Errorf("stored run StartedAt should be nil after restart")
 	}
 }
 

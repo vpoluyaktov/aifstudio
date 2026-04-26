@@ -276,6 +276,14 @@ Rules (non-negotiable):
     Wrong:  The Wheelhouse is a room. The Wheelhouse Antechamber is a room.
     Correct: The Bridge is a room. The Fore Vestibule is a room.
 
+    This also applies to object-room name collisions. Never create a thing
+    whose name is a substring (or prefix) of a room name. If a room is
+    called "Boiler Hall" do not name any object "boiler" — Inform 7 will
+    confuse them and report "this asks to put something inside itself" when
+    you try to place the object in that room. Use a distinctive qualifier:
+    Wrong:  The Boiler Hall is a room. The boiler is scenery in the Boiler Hall.
+    Correct: The Boiler Hall is a room. The iron boiler is scenery in the Boiler Hall.
+
 40. Every game must open with a short atmospheric introduction using a
     "When play begins:" rule. Use "[paragraph break]" at the start and end
     of the introduction text so it is visually separated from the first room
@@ -285,3 +293,16 @@ Rules (non-negotiable):
           seabed. The reactor hums with barely-contained energy.[paragraph break]".
     Keep the introduction to 1–3 sentences. Do not repeat information that
     the first room description already conveys.
+
+41. To declare a boolean flag (truth-state variable), write:
+      alarm-triggered is a truth state that varies.
+    The default value is false. To set it inside a rule use `now`:
+      now alarm-triggered is true;
+    NEVER use "A truth state called X is false/true." — truth state is a
+    built-in kind of value with exactly two members (true and false); you
+    cannot invent new members, and Inform 7 will fail with "I can't create
+    a new truth state" or "reads to me as if it refers to something brand new".
+    Wrong:  A truth state called warning-shown is false.
+    Wrong:  A truth state called ghost-manifested is true.
+    Correct: warning-shown is a truth state that varies.
+    Correct: ghost-manifested is a truth state that varies.

@@ -376,6 +376,7 @@ body.workspace-page > .footer { display: none; }
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
+  grid-column: 1 / -1; /* span both columns in the desktop 2-col grid */
 }
 .ws-test-header {
   font-size: 0.78rem;
@@ -406,9 +407,9 @@ body.workspace-page > .footer { display: none; }
 .ws-test-result.fail         { color: #f85149; }
 .ws-test-result.error-result { color: var(--orange); }
 
-/* ── Source panel collapse toggle ── */
+/* ── Panel collapse toggle buttons (source, test, chat) ── */
 /* Full-width button wrapping the label — always a real <button> so iOS taps work */
-.ws-source-toggle-btn {
+.ws-panel-collapse-btn {
   display: flex;
   align-items: center;
   gap: 0.45rem;
@@ -426,7 +427,7 @@ body.workspace-page > .footer { display: none; }
   min-width: 0;
   text-align: left;
 }
-.ws-source-toggle-icon {
+.ws-panel-collapse-icon {
   display: none; /* hidden on desktop */
   font-size: 0.85rem;
   line-height: 1;
@@ -436,26 +437,39 @@ body.workspace-page > .footer { display: none; }
 /* ── Mobile (≤700 px) ── */
 @media (max-width: 700px) {
   body.workspace-page { height: 100dvh; }
-  .ws-source-toggle-btn { cursor: pointer; }
-  .ws-source-toggle-icon { display: inline; }
+  .ws-panel-collapse-btn { cursor: pointer; }
+  .ws-panel-collapse-icon { display: inline; }
   .ws-panels {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-    overflow-y: hidden;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
-  .ws-source-panel {
+  .ws-source-panel,
+  .ws-test-panel,
+  .ws-chat-panel {
     border-right: none;
     border-bottom: 1px solid var(--border);
     overflow: hidden;
-    max-height: 40vh;
-    transition: max-height 0.22s ease;
+    transition: flex 0.22s ease, max-height 0.22s ease;
   }
-  .ws-source-panel.collapsed {
-    max-height: 2.75rem; /* tall enough to be a comfortable tap target */
-    overflow: hidden;
+  .ws-source-panel.collapsed,
+  .ws-test-panel.collapsed,
+  .ws-chat-panel.collapsed {
+    flex: 0 0 2.75rem;
+    max-height: 2.75rem;
+  }
+  .ws-source-panel:not(.collapsed),
+  .ws-test-panel:not(.collapsed),
+  .ws-chat-panel:not(.collapsed) {
+    flex: 1;
+    max-height: 100%;
   }
   .ws-source-panel.collapsed .ws-source-editor,
-  .ws-source-panel.collapsed .ws-source-hint {
+  .ws-source-panel.collapsed .ws-source-hint,
+  .ws-test-panel.collapsed .ws-test-output,
+  .ws-test-panel.collapsed .ws-test-result,
+  .ws-chat-panel.collapsed .ws-chat-history,
+  .ws-chat-panel.collapsed .ws-chat-input-area {
     display: none;
   }
   .ws-toolbar-title { max-width: 140px; font-size: 0.85rem; }
@@ -691,21 +705,14 @@ body.workspace-page > .footer { display: none; }
     <!-- Build log (shown on failed builds) -->
     <div id="wsBuildLog" style="display:none"></div>
 
-    <!-- Test output panel (shown during/after test run) -->
-    <div id="wsTestPanel" class="ws-test-panel" style="display:none">
-      <div class="ws-test-header">🧪 Test Output</div>
-      <pre id="wsTestOutput" class="ws-test-output"></pre>
-      <div id="wsTestResult" class="ws-test-result" style="display:none"></div>
-    </div>
-
     <!-- Panels -->
     <div class="ws-panels">
 
-      <!-- Left: Source — starts collapsed on mobile (CSS gates the class via media query) -->
+      <!-- Left: Source — starts collapsed on mobile -->
       <div class="ws-source-panel collapsed">
         <div class="ws-panel-header">
-          <button id="sourceCollapseBtn" class="ws-source-toggle-btn" aria-expanded="false">
-            <span id="sourceCollapseIcon" class="ws-source-toggle-icon">▸</span>
+          <button id="sourceCollapseBtn" class="ws-panel-collapse-btn" aria-expanded="false">
+            <span id="sourceCollapseIcon" class="ws-panel-collapse-icon">▸</span>
             <span>Inform 7 Source</span>
           </button>
           <div class="ws-panel-right">
@@ -724,10 +731,25 @@ body.workspace-page > .footer { display: none; }
         <div class="ws-source-hint" id="wsSourceHint"></div>
       </div>
 
+      <!-- Test output — accordion section on mobile, hidden on desktop until test runs -->
+      <div id="wsTestPanel" class="ws-test-panel collapsed">
+        <div class="ws-test-header">
+          <button id="testCollapseBtn" class="ws-panel-collapse-btn" aria-expanded="false">
+            <span id="testCollapseIcon" class="ws-panel-collapse-icon">▸</span>
+            <span>Test Output</span>
+          </button>
+        </div>
+        <pre id="wsTestOutput" class="ws-test-output"></pre>
+        <div id="wsTestResult" class="ws-test-result" style="display:none"></div>
+      </div>
+
       <!-- Right: Chat -->
       <div class="ws-chat-panel">
         <div class="ws-panel-header">
-          <span>AI Assistant</span>
+          <button id="chatCollapseBtn" class="ws-panel-collapse-btn" aria-expanded="true">
+            <span id="chatCollapseIcon" class="ws-panel-collapse-icon">▾</span>
+            <span>AI Assistant</span>
+          </button>
           <div class="ws-panel-right">
             <span id="publishPill" class="publish-pill" style="display:none"></span>
           </div>

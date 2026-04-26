@@ -23,6 +23,7 @@
   var saveBtn, buildBtn, playBtn, testBtn, publishBtn, publishPill, backBtn, deleteBtn;
   var editToggle;
   var sourceCollapseBtn, wsSourcePanel;
+  var testCollapseBtn, chatCollapseBtn, wsChatPanel;
   var wsTestPanel, wsTestOutput, wsTestResult;
   var historyBtn, wsHistoryBackdrop, wsHistoryDrawer, wsHistoryCloseBtn;
   var wsHistoryListEl, wsHistoryLoadingEl, wsHistoryPreviewEl;
@@ -55,6 +56,9 @@
     editToggle          = document.getElementById('editToggle');
     sourceCollapseBtn   = document.getElementById('sourceCollapseBtn');
     wsSourcePanel       = document.querySelector('.ws-source-panel');
+    testCollapseBtn     = document.getElementById('testCollapseBtn');
+    chatCollapseBtn     = document.getElementById('chatCollapseBtn');
+    wsChatPanel         = document.querySelector('.ws-chat-panel');
     wsBuildLog      = document.getElementById('wsBuildLog');
     deleteBtn       = document.getElementById('deleteBtn');
     testBtn         = document.getElementById('testBtn');
@@ -91,7 +95,25 @@
       wsSourceEditor.readOnly = !this.checked;
     });
 
-    sourceCollapseBtn.addEventListener('click', toggleSourcePanel);
+    sourceCollapseBtn.addEventListener('click', function() {
+      expandPanel(wsSourcePanel, sourceCollapseBtn, document.getElementById('sourceCollapseIcon'));
+    });
+    if (testCollapseBtn) {
+      testCollapseBtn.addEventListener('click', function() {
+        expandPanel(wsTestPanel, testCollapseBtn, document.getElementById('testCollapseIcon'));
+      });
+    }
+    if (chatCollapseBtn) {
+      chatCollapseBtn.addEventListener('click', function() {
+        expandPanel(wsChatPanel, chatCollapseBtn, document.getElementById('chatCollapseIcon'));
+      });
+    }
+
+    // On desktop, the test panel starts hidden (shown only during/after test run).
+    // On mobile it is always in the accordion but starts collapsed via HTML class.
+    if (wsTestPanel && !window.matchMedia('(max-width: 700px)').matches) {
+      wsTestPanel.style.display = 'none';
+    }
 
     // Cmd/Ctrl+Enter sends message
     wsChatInput.addEventListener('keydown', function (e) {
@@ -581,7 +603,15 @@
 
   function hideTestPanel() {
     if (wsTestPanel) {
-      wsTestPanel.style.display = 'none';
+      if (window.matchMedia('(max-width: 700px)').matches) {
+        // Mobile: collapse the panel but keep it in the DOM (accordion section)
+        wsTestPanel.classList.add('collapsed');
+        if (testCollapseBtn) testCollapseBtn.setAttribute('aria-expanded', 'false');
+        var icon = document.getElementById('testCollapseIcon');
+        if (icon) icon.textContent = '▸';
+      } else {
+        wsTestPanel.style.display = 'none';
+      }
       wsTestOutput.textContent = '';
       wsTestResult.style.display = 'none';
       wsTestResult.className = 'ws-test-result';
@@ -674,7 +704,12 @@
     testBtn.textContent = '⏳ Testing…';
 
     // Show (or reset) the test panel
-    wsTestPanel.style.display = '';
+    if (window.matchMedia('(max-width: 700px)').matches) {
+      // Mobile: expand via accordion
+      expandPanel(wsTestPanel, testCollapseBtn, document.getElementById('testCollapseIcon'));
+    } else {
+      wsTestPanel.style.display = '';
+    }
     wsTestOutput.textContent = '';
     wsTestResult.style.display = 'none';
     wsTestResult.className = 'ws-test-result';
@@ -728,6 +763,11 @@
   function onTestFinished(won, err, transcript) {
     testBtn.textContent = '🧪 Run Test';
     setState('idle');
+
+    // On mobile, ensure test panel stays expanded so results are visible
+    if (window.matchMedia('(max-width: 700px)').matches) {
+      expandPanel(wsTestPanel, testCollapseBtn, document.getElementById('testCollapseIcon'));
+    }
 
     if (err !== null) {
       wsTestResult.textContent = '⚠ Test error: ' + err;
@@ -1046,13 +1086,24 @@
     }
   }
 
-  // ── Source panel collapse (mobile) ───────────────────────────────────────────
+  // ── Panel accordion (mobile) ─────────────────────────────────────────────────
 
-  function toggleSourcePanel() {
-    var collapsed = wsSourcePanel.classList.toggle('collapsed');
-    var icon = document.getElementById('sourceCollapseIcon');
-    if (icon) icon.textContent = collapsed ? '▸' : '▾';
-    sourceCollapseBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  function expandPanel(panelEl, btnEl, iconEl) {
+    // Collapse all three panels first
+    [wsSourcePanel, wsTestPanel, wsChatPanel].forEach(function(p) {
+      if (p) p.classList.add('collapsed');
+    });
+    [sourceCollapseBtn, testCollapseBtn, chatCollapseBtn].forEach(function(b) {
+      if (b) b.setAttribute('aria-expanded', 'false');
+    });
+    ['sourceCollapseIcon', 'testCollapseIcon', 'chatCollapseIcon'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = '▸';
+    });
+    // Expand the target panel
+    panelEl.classList.remove('collapsed');
+    if (btnEl) btnEl.setAttribute('aria-expanded', 'true');
+    if (iconEl) iconEl.textContent = '▾';
   }
 
   // ── History panel ─────────────────────────────────────────────────────────────

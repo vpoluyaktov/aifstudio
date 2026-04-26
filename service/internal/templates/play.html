@@ -782,7 +782,7 @@ input[type="text"].term-input:focus {
       // title block.
       if (next !== null && /^an interactive fiction by/i.test(next) &&
           out.length > 0 && out[out.length - 1].trim() !== '') {
-        out.push('');
+        out.push(' ');
       }
 
       out.push(line);
@@ -790,7 +790,7 @@ input[type="text"].term-input:focus {
       // Blank line after the cheapglk VM banner line.
       if (/cheap glk implementation/i.test(line) &&
           next !== null && next.trim() !== '') {
-        out.push('');
+        out.push(' ');
       }
     }
     return out.join('\n');

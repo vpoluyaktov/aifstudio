@@ -341,7 +341,19 @@ input[type="text"].term-input:focus {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.2; }
 }
-.status-running    { color: #00ff88; animation: crt-pulse 1.2s ease-in-out infinite; }
+.status-running    { color: #00ff88; }
+.status-running::before {
+  content: '';
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  background: #00ff88;
+  box-shadow: 0 0 4px #00ff88;
+  margin-right: 0.45em;
+  vertical-align: middle;
+  animation: crt-pulse 1.2s ease-in-out infinite;
+}
 .status-connecting { color: #ffb347; animation: crt-pulse 0.7s ease-in-out infinite; }
 
 /* Floppy drive indicator bar */

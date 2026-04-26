@@ -350,25 +350,26 @@ func (s *Server) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build OpenAI messages with truncation policy (§8.3).
+	// The system prompt already embeds the current source, so we do NOT
+	// re-append source_after to each history turn — doing so bloats every
+	// turn by ~8 KB and pushes early attempts out of the context window
+	// after only 3–4 turns, preventing the model from learning from its
+	// own prior mistakes in the same session.
 	sysMsgs := []openaiPkg.Message{
 		{Role: "system", Content: BuildSystem(p.Name, p.Description, sourceBefore)},
 	}
-	budget := 32000
+	budget := 80000
 	var tail []openaiPkg.Message
 	for i := len(turns) - 1; i >= 0; i-- {
-		assistantContent := turns[i].AssistantReply
-		if turns[i].SourceAfter != "" {
-			assistantContent += "\n\n```inform7\n" + turns[i].SourceAfter + "\n```"
-		}
 		uLen := len(turns[i].UserMessage)
-		aLen := len(assistantContent)
+		aLen := len(turns[i].AssistantReply)
 		if uLen+aLen > budget {
 			break
 		}
 		budget -= uLen + aLen
 		tail = append([]openaiPkg.Message{
 			{Role: "user", Content: turns[i].UserMessage},
-			{Role: "assistant", Content: assistantContent},
+			{Role: "assistant", Content: turns[i].AssistantReply},
 		}, tail...)
 	}
 	msgs := append(sysMsgs, tail...)

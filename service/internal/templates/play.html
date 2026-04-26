@@ -767,35 +767,6 @@ input[type="text"].term-input:focus {
     };
   }
 
-  // Inserts blank lines between the three logical sections of a startup header:
-  //   1. cheapglk VM banner  ("Welcome to the Cheap Glk Implementation…")
-  //   2. When-play-begins intro text (optional)
-  //   3. Title / "An Interactive Fiction by…" / Release line
-  function normalizeHeaderSpacing(header) {
-    var lines = header.split('\n');
-    var out = [];
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i];
-      var next = i + 1 < lines.length ? lines[i + 1] : null;
-
-      // Blank line before the game title (the line immediately above
-      // "An Interactive Fiction by…"), so intro text is separated from the
-      // title block.
-      if (next !== null && /^an interactive fiction by/i.test(next) &&
-          out.length > 0 && out[out.length - 1].trim() !== '') {
-        out.push(' ');
-      }
-
-      out.push(line);
-
-      // Blank line after the cheapglk VM banner line.
-      if (/cheap glk implementation/i.test(line) &&
-          next !== null && next.trim() !== '') {
-        out.push(' ');
-      }
-    }
-    return out.join('\n');
-  }
 
   // ── /start — called once on page load ────────────────────────────────────────
 
@@ -837,7 +808,7 @@ input[type="text"].term-input:focus {
             // Fresh start: split banner (white) from first room (green).
             var parts = splitStartupText(data.output);
             if (parts.header) {
-              var headerLines = normalizeHeaderSpacing(parts.header).split('\n');
+              var headerLines = parts.header.split('\n');
               for (var k = 0; k < headerLines.length; k++) {
                 appendLine(headerLines[k], 'out-line-meta');
               }

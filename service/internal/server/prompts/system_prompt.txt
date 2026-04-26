@@ -340,3 +340,57 @@ Rules (non-negotiable):
 
     Note: hyphens in variable names are valid Inform 7 identifiers.
     "warning-30-shown is a truth state that varies." compiles correctly.
+
+43. `stop the action` inside a `Carry out` rule ends the Carry out
+    rulebook but does NOT prevent the `Report` rulebook from running.
+    If you have a catch-all Report rule, it WILL fire even after a
+    successful specific Carry out rule, printing both messages.
+    For custom two-noun actions where one specific combination succeeds
+    and all others fail, use `Instead of` for both branches:
+
+    Wrong (Report fires after Carry out success — two messages print):
+      Carry out prying the wall with the prybar:
+          say "The wall falls away.";
+          stop the action.
+      Report prying something with:
+          say "Nothing gives.".   [fires even for the success case!]
+
+    Correct (Instead rules stop all further processing):
+      Instead of prying the wall with the prybar:
+          say "The wall falls away.";
+          [side effects here — now ...; increase score by N;]
+      Instead of prying something with something:
+          say "Nothing gives.".
+
+44. Room connections are bidirectional by default. Declaring "B is north
+    of A" also makes A the south neighbour of B. If you then declare
+    "B is north of C", B's south now points to BOTH A and C — a
+    contradiction Inform 7 will reject. Only one room can be the southern
+    (or northern, eastern, etc.) neighbour of any given room.
+    To make a hub room reachable from two directions, use different compass
+    points for each approach:
+    Wrong:  The Hub is north of Room A. The Hub is north of Room B.
+            [Hub's south → A and Hub's south → B: contradiction]
+    Correct: The Hub is north of Room A. The Hub is northeast of Room B.
+
+45. When a door object already connects two rooms, do NOT also write a
+    direct room-to-room sentence for the same pair. The door IS the
+    connection — adding a redundant direct sentence creates a contradiction.
+    Wrong:  The steel door is north of the Fan Chamber and south of the Landing.
+            The Landing is north of the Fan Chamber.   [contradiction!]
+    Correct: The steel door is north of the Fan Chamber and south of the Landing.
+             [no direct room sentence — the door handles navigation]
+
+46. The `Test me with` script must be a verified, step-by-step walkthrough
+    of the game as it actually exists in the current source. Before writing
+    or updating it, mentally trace every command in sequence and confirm
+    each one succeeds given the current game state. Key consistency rules:
+    - Every item the test picks up must be in the room where the test
+      tries to take it.
+    - Every room the test navigates to must be connected by the current map.
+    - Every puzzle step (pry, unlock, open) must occur in the right order
+      and location.
+    When fixing a test failure, update EITHER the game logic OR the test
+    script so they agree completely — never leave them inconsistent. If
+    the test expects key in room X, either put the key in room X or rewrite
+    the test to pick it up from wherever it actually is.

@@ -55,7 +55,6 @@
     editToggle          = document.getElementById('editToggle');
     sourceCollapseBtn   = document.getElementById('sourceCollapseBtn');
     wsSourcePanel       = document.querySelector('.ws-source-panel');
-    var sourcePanelHeader = document.getElementById('sourcePanelHeader');
     wsBuildLog      = document.getElementById('wsBuildLog');
     deleteBtn       = document.getElementById('deleteBtn');
     testBtn         = document.getElementById('testBtn');
@@ -92,13 +91,7 @@
       wsSourceEditor.readOnly = !this.checked;
     });
 
-    // Whole header row is the tap target; button click is already inside it so
-    // we only need one listener on the header — skip if the edit-toggle label
-    // or its checkbox was the target (those have their own behaviour).
-    sourcePanelHeader.addEventListener('click', function (e) {
-      if (e.target.closest('.edit-toggle-label')) return;
-      toggleSourcePanel();
-    });
+    sourceCollapseBtn.addEventListener('click', toggleSourcePanel);
 
     // Cmd/Ctrl+Enter sends message
     wsChatInput.addEventListener('keydown', function (e) {
@@ -1015,7 +1008,8 @@
 
   function toggleSourcePanel() {
     var collapsed = wsSourcePanel.classList.toggle('collapsed');
-    sourceCollapseBtn.textContent = collapsed ? '▸' : '▾';
+    var icon = document.getElementById('sourceCollapseIcon');
+    if (icon) icon.textContent = collapsed ? '▸' : '▾';
     sourceCollapseBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
   }
 

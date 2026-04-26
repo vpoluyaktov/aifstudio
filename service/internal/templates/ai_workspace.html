@@ -407,28 +407,37 @@ body.workspace-page > .footer { display: none; }
 .ws-test-result.error-result { color: var(--orange); }
 
 /* ── Source panel collapse toggle ── */
-.ws-source-collapse-btn {
+/* Full-width button wrapping the label — always a real <button> so iOS taps work */
+.ws-source-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
   background: none;
   border: none;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 1rem;
-  /* large tap target */
-  padding: 0.25rem 0.6rem;
-  margin-left: -0.3rem;
-  border-radius: 4px;
-  line-height: 1;
-  transition: color 0.15s, background 0.15s;
-  display: none; /* hidden on desktop */
-  flex-shrink: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  cursor: default;
+  padding: 0;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
 }
-.ws-source-collapse-btn:hover,
-.ws-source-collapse-btn:active { color: var(--text); background: rgba(255,255,255,0.07); }
+.ws-source-toggle-icon {
+  display: none; /* hidden on desktop */
+  font-size: 0.85rem;
+  line-height: 1;
+  color: var(--muted);
+}
 
 /* ── Mobile (≤700 px) ── */
 @media (max-width: 700px) {
   body.workspace-page { height: 100dvh; }
-  .ws-source-collapse-btn { display: inline-flex; align-items: center; }
+  .ws-source-toggle-btn { cursor: pointer; }
+  .ws-source-toggle-icon { display: inline; }
   .ws-panels {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
@@ -448,11 +457,6 @@ body.workspace-page > .footer { display: none; }
   .ws-source-panel.collapsed .ws-source-editor,
   .ws-source-panel.collapsed .ws-source-hint {
     display: none;
-  }
-  /* entire header row is tappable on mobile */
-  .ws-source-panel .ws-panel-header {
-    cursor: pointer;
-    user-select: none;
   }
   .ws-toolbar-title { max-width: 140px; font-size: 0.85rem; }
 }
@@ -699,9 +703,11 @@ body.workspace-page > .footer { display: none; }
 
       <!-- Left: Source — starts collapsed on mobile (CSS gates the class via media query) -->
       <div class="ws-source-panel collapsed">
-        <div class="ws-panel-header" id="sourcePanelHeader">
-          <button id="sourceCollapseBtn" class="ws-source-collapse-btn" title="Toggle source panel" aria-expanded="false">▸</button>
-          <span>Inform 7 Source</span>
+        <div class="ws-panel-header">
+          <button id="sourceCollapseBtn" class="ws-source-toggle-btn" aria-expanded="false">
+            <span id="sourceCollapseIcon" class="ws-source-toggle-icon">▸</span>
+            <span>Inform 7 Source</span>
+          </button>
           <div class="ws-panel-right">
             <label class="edit-toggle-label">
               <input type="checkbox" id="editToggle"> Edit manually

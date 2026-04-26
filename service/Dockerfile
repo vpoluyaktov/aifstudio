@@ -41,10 +41,12 @@ FROM vpoluyaktov/aifstudio-base:frobtads-v2.0-inform7-10.1.2
 # Bake the version into the image so APP_VERSION doesn't need to be set in .env.
 ARG APP_VERSION=dev
 
-# App binary.
+# App binary and entrypoint.
 COPY --from=gobuilder /out/aifstudio /usr/local/bin/aifstudio
+COPY --chmod=755 docker-entrypoint.sh /docker-entrypoint.sh
 
-USER app
+# Container starts as root so the entrypoint can chown the bind-mounted data
+# directories before dropping to the app user via `runuser`.
 
 # /usr/games is on PATH so apt-installed frotz/dfrotz/glulxe resolve.
 # DB_PATH and STORAGE_PATH default to the volume mount targets so the
@@ -61,4 +63,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:8080/health || exit 1
 
-ENTRYPOINT ["/usr/local/bin/aifstudio"]
+ENTRYPOINT ["/docker-entrypoint.sh"]

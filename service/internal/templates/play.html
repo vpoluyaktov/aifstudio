@@ -750,6 +750,19 @@ input[type="text"].term-input:focus {
   // ── Startup text splitter ────────────────────────────────────────────────────
   // Splits Infocom/frotz startup output into a metadata header (title banner,
   // copyright, release line) and the first room description.
+  // Collapse runs of consecutive blank lines to at most one.
+  function collapseBlankLines(lines) {
+    var result = [];
+    var lastBlank = false;
+    for (var i = 0; i < lines.length; i++) {
+      var blank = lines[i].trim() === '';
+      if (blank && lastBlank) continue;
+      result.push(lines[i]);
+      lastBlank = blank;
+    }
+    return result;
+  }
+
   // The split point is the last line matching the "Release N / Serial number N"
   // pattern — everything up to and including that line is the header.
   function splitStartupText(text) {
@@ -808,7 +821,7 @@ input[type="text"].term-input:focus {
             // Fresh start: split banner (white) from first room (green).
             var parts = splitStartupText(data.output);
             if (parts.header) {
-              var headerLines = parts.header.split('\n');
+              var headerLines = collapseBlankLines(parts.header.split('\n'));
               for (var k = 0; k < headerLines.length; k++) {
                 appendLine(headerLines[k], 'out-line-meta');
               }

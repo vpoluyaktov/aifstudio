@@ -2,7 +2,6 @@ package runner
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 )
@@ -28,9 +27,7 @@ func SelectInterpreter(storyPath string) (name string, cmd *exec.Cmd, err error)
 	case hasSuffix(lower, ".z3", ".z4", ".z5", ".z6", ".z7", ".z8", ".zblorb"):
 		return "dfrotz", exec.Command("dfrotz", "-p", "-q", "-m", "-w", "255", storyPath), nil
 	case hasSuffix(lower, ".ulx", ".gblorb"):
-		cmd := exec.Command("glulxe", storyPath)
-		cmd.Env = append(os.Environ(), "TERM=dumb") // glulxe uses ncurses; dumb avoids escape codes on pipes
-		return "glulxe", cmd, nil
+		return "glulxe", exec.Command("glulxe", storyPath), nil
 	case hasSuffix(lower, ".gam", ".t3"):
 		return "frob", exec.Command("frob", "-i", "plain", "-p", storyPath), nil
 	default:
@@ -46,9 +43,7 @@ func interpreterCommandByName(name, storyPath string) (*exec.Cmd, error) {
 	case "dfrotz":
 		return exec.Command("dfrotz", "-p", "-q", "-m", "-w", "255", storyPath), nil
 	case "glulxe":
-		cmd := exec.Command("glulxe", storyPath)
-		cmd.Env = append(os.Environ(), "TERM=dumb")
-		return cmd, nil
+		return exec.Command("glulxe", storyPath), nil
 	case "frob":
 		return exec.Command("frob", "-i", "plain", "-p", storyPath), nil
 	default:

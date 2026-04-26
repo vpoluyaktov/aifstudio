@@ -5,9 +5,13 @@
 # This image bakes the slow-changing runtime: Debian bookworm-slim plus
 # every interactive-fiction interpreter the service shells out to:
 #
-#   - frotz / dfrotz / glulxe       (apt; /usr/games)
-#   - inform6 + inform6 library     (apt)
-#   - frob (TADS 2/3)               (built from
+#   - frotz / dfrotz             (apt; /usr/games)
+#   - glulxe                     (built from source against cheapglk —
+#                                 apt's glulxe links glkterm/ncurses and
+#                                 fails with "Error opening terminal: unknown"
+#                                 when spawned without a TTY)
+#   - inform6 + inform6 library  (apt)
+#   - frob (TADS 2/3)            (built from
 #     github.com/realnc/frobtads v2.0 — not in any current Debian suite,
 #     must be built from source)
 #   - inform7 + inform6 back-end + Internal tree
@@ -29,6 +33,62 @@
 # ENV / EXPOSE / HEALTHCHECK / ENTRYPOINT and the Go-binary COPY all live
 # in the per-commit `service/Dockerfile`, NOT here.
 
+# ─── Stage 1: glulxe (Glulx VM) builder, linked against cheapglk ─────────────
+#
+# The Debian apt `glulxe` package (/usr/games/glulxe) is linked against
+# glkterm, which calls ncurses initscr() on startup. When spawned with piped
+# stdio and no TTY (our runner model), initscr() fails with
+#   "Error opening terminal: unknown."
+# and the process exits before producing any game output.
+# Setting TERM=xterm/linux/dumb gets past initscr() but subsequent output is
+# littered with cursor-movement escape sequences — unusable for our text-proxy.
+#
+# The fix is cheapglk: a plain-stdio Glk library with no curses dependency.
+# glulxe + cheapglk produces clean, line-oriented text output suitable for
+# pipe-through to our WebSocket frontend.
+#
+# Pinned to current upstream tags. Bump + rebuild base image to upgrade.
+#   https://github.com/erkyrath/cheapglk
+#   https://github.com/erkyrath/glulxe
+FROM debian:bookworm-slim AS glulxebuilder
+RUN set -eux; \
+    export DEBIAN_FRONTEND=noninteractive; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      build-essential \
+      ca-certificates \
+      curl \
+      tar; \
+    rm -rf /var/lib/apt/lists/*
+
+ARG CHEAPGLK_TAG=cheapglk-1.0.7a
+ARG GLULXE_TAG=glulxe-0.6.1
+
+WORKDIR /src
+RUN set -eux; \
+    mkdir /src/cheapglk /src/glulxe; \
+    curl -fsSL "https://api.github.com/repos/erkyrath/cheapglk/tarball/${CHEAPGLK_TAG}" \
+      | tar -C /src/cheapglk --strip-components=1 -xz; \
+    curl -fsSL "https://api.github.com/repos/erkyrath/glulxe/tarball/${GLULXE_TAG}" \
+      | tar -C /src/glulxe --strip-components=1 -xz
+
+# Build cheapglk (produces libcheapglk.a), then glulxe linked against it.
+# Verify: no ncurses/tinfo link, and no "Error opening terminal" on piped run.
+RUN set -eux; \
+    cd /src/cheapglk && make -j"$(nproc)"; \
+    cd /src/glulxe && make -j"$(nproc)" \
+      GLKINCLUDEDIR=/src/cheapglk \
+      GLKLIBDIR=/src/cheapglk \
+      GLKMAKEFILE=Make.cheapglk; \
+    strip /src/glulxe/glulxe; \
+    ldd /src/glulxe/glulxe | grep -E "ncurses|tinfo" && { echo "FATAL: glulxe still links ncurses/tinfo" >&2; exit 1; } || :; \
+    unset TERM; \
+    out=$(echo "" | /src/glulxe/glulxe /dev/null 2>&1 | head -5); \
+    echo "$out"; \
+    echo "$out" | grep -q "Error opening terminal" && { echo "FATAL: glulxe still uses curses" >&2; exit 1; } || :; \
+    echo "$out" | grep -q "Cheap Glk Implementation" || { echo "FATAL: glulxe did not produce cheapglk banner" >&2; exit 1; }
+
+# ─── Stage 2: Runtime base ────────────────────────────────────────────────────
 FROM debian:bookworm-slim
 
 # IF toolchain pin: bumping FROBTADS_TAG or INFORM7_DEB_URL is a deliberate
@@ -41,7 +101,10 @@ RUN set -eux; \
     apt-get update; \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         ca-certificates tzdata curl wget tar xz-utils unzip bash \
-        frotz glulxe inform6-compiler inform6-library; \
+        frotz inform6-compiler inform6-library; \
+    # NOTE: glulxe intentionally NOT installed from apt — apt's build links
+    # glkterm/ncurses and fails without a TTY. We use the cheapglk build from
+    # stage 1 instead (copied below).
     # Build deps for `frob` (TADS 2/3 interpreter — frobtads is not packaged
     # in bookworm/trixie, must be built from source). Purged in the same
     # RUN layer below so they do not stay in the image.
@@ -91,6 +154,9 @@ RUN set -eux; \
         libcurl4 libncurses6 libtinfo6; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
+
+# cheapglk-linked glulxe (no ncurses dependency, clean stdio output).
+COPY --from=glulxebuilder /src/glulxe/glulxe /usr/local/bin/glulxe
 
 # Wrapper that chains inform7 → inform6 → Glulx behind a single entry point
 # at /usr/local/bin/inform7 — compiler.go invokes that path verbatim. The

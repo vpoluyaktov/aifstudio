@@ -832,30 +832,72 @@
   }
 
   // ── Play ──────────────────────────────────────────────────────────────────────
+  // Cache key stores { buildId, runId } so we can restart the same run instead
+  // of creating a new history entry on every play click.
+  function playRunCacheKey() { return 'ws_run_' + projectId; }
+
   function wsPlay() {
     if (!project || !project.latestBuildId) return;
     playBtn.disabled = true;
     playBtn.textContent = '⏳ Starting…';
 
-    apiFetch('/api/runs', {
-      method: 'POST',
-      body: JSON.stringify({ sourceType: 'build', buildId: project.latestBuildId }),
-    })
-      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
-      .then(function (res) {
-        if (!res.ok) {
+    var buildId = project.latestBuildId;
+    var cached = null;
+    try {
+      var raw = localStorage.getItem(playRunCacheKey());
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        if (parsed && parsed.buildId === buildId) cached = parsed.runId;
+      }
+    } catch (_) {}
+
+    function createAndGo() {
+      apiFetch('/api/runs', {
+        method: 'POST',
+        body: JSON.stringify({ sourceType: 'build', buildId: buildId }),
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          if (!res.ok) {
+            playBtn.disabled = false;
+            playBtn.textContent = '▶ Play';
+            setStatus('Could not start: ' + ((res.data && res.data.error) || 'error'), 'error');
+            return;
+          }
+          try { localStorage.setItem(playRunCacheKey(), JSON.stringify({ buildId: buildId, runId: res.data.id })); } catch (_) {}
+          window.location.href = '/play/' + res.data.id;
+        })
+        .catch(function (err) {
           playBtn.disabled = false;
           playBtn.textContent = '▶ Play';
-          setStatus('Could not start: ' + ((res.data && res.data.error) || 'error'), 'error');
-          return;
-        }
-        window.location.href = '/play/' + res.data.id;
-      })
-      .catch(function (err) {
-        playBtn.disabled = false;
-        playBtn.textContent = '▶ Play';
-        setStatus('Play failed: ' + err.message, 'error');
-      });
+          setStatus('Play failed: ' + err.message, 'error');
+        });
+    }
+
+    if (cached) {
+      apiFetch('/api/runs/' + encodeURIComponent(cached) + '/restart', { method: 'POST' })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
+        .then(function (res) {
+          if (res.ok) {
+            window.location.href = '/play/' + cached;
+          } else if (res.status === 404 || res.status === 403) {
+            // Run was deleted or belongs to another user — create fresh.
+            try { localStorage.removeItem(playRunCacheKey()); } catch (_) {}
+            createAndGo();
+          } else {
+            playBtn.disabled = false;
+            playBtn.textContent = '▶ Play';
+            setStatus('Could not start: ' + ((res.data && res.data.error) || 'error'), 'error');
+          }
+        })
+        .catch(function (err) {
+          playBtn.disabled = false;
+          playBtn.textContent = '▶ Play';
+          setStatus('Play failed: ' + err.message, 'error');
+        });
+    } else {
+      createAndGo();
+    }
   }
 
   // ── Publish ───────────────────────────────────────────────────────────────────

@@ -825,7 +825,7 @@ input[type="text"].term-input:focus {
         if (data.output) {
           if (data.resumed) {
             // Resume: output is just the current room — render green directly.
-            var resumeLines = data.output.split('\n');
+            var resumeLines = collapseBlankLines(data.output.split('\n'));
             for (var j = 0; j < resumeLines.length; j++) {
               appendLine(resumeLines[j], '');
             }
@@ -840,7 +840,7 @@ input[type="text"].term-input:focus {
             }
             if (parts.body) {
               appendLine(' ');  // visible blank separator
-              var bodyLines = parts.body.split('\n');
+              var bodyLines = collapseBlankLines(parts.body.split('\n'));
               for (var m = 0; m < bodyLines.length; m++) {
                 appendLine(bodyLines[m], '');
               }
@@ -916,7 +916,7 @@ input[type="text"].term-input:focus {
           return;
         }
         if (data && data.output) {
-          var lines = data.output.split('\n');
+          var lines = collapseBlankLines(data.output.split('\n'));
           for (var i = 0; i < lines.length; i++) {
             appendLine(lines[i], '');
           }

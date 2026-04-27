@@ -251,8 +251,11 @@ func (s *Session) Start(ctx context.Context) (string, error) {
 	}
 
 	// Collect interpreter startup output (or look response after restore).
+	// 60 s gives even very talkative TADS games (which emit one [More] per line
+	// of their startup narrative) plenty of room — with the 50 ms per-[More]
+	// quiescence window the loop completes in < 5 s for 100 prompts.
 	quiesceDur := time.Duration(s.cfg.SaveQuiescenceMs) * time.Millisecond
-	output := s.collectUntilQuiescence(ctx, quiesceDur, 10*time.Second)
+	output := s.collectUntilQuiescence(ctx, quiesceDur, 60*time.Second)
 
 	// For fresh dfrotz sessions, enable verbose mode so movement commands
 	// always print room descriptions. Restored sessions already have verbose
@@ -371,10 +374,14 @@ func (s *Session) Stop() {
 // until maxWait elapses, or until ctx is cancelled.
 // It transparently auto-dismisses [MORE] pagination prompts emitted by frob/TADS:
 // the prompt is stripped from the output and a newline is sent to continue.
+// After each [MORE] dismissal a shorter quiescence window (moreQuiesceDur) is
+// used so that high-[MORE]-count startup sequences complete well within maxWait.
 func (s *Session) collectUntilQuiescence(ctx context.Context, dur, maxWait time.Duration) string {
+	const moreQuiesceDur = 50 * time.Millisecond
 	var sb strings.Builder
 	deadline := time.Now().Add(maxWait)
 	moreDismissals := 0
+	recentDismissal := false
 	for {
 		select {
 		case chunk, ok := <-s.outCh:
@@ -388,7 +395,11 @@ func (s *Session) collectUntilQuiescence(ctx context.Context, dur, maxWait time.
 			if time.Now().After(deadline) {
 				return sb.String()
 			}
-			if s.quiesced(dur) {
+			checkDur := dur
+			if recentDismissal {
+				checkDur = moreQuiesceDur
+			}
+			if s.quiesced(checkDur) {
 				collected := sb.String()
 				if moreDismissals < 50 && isMorePrompt(collected) {
 					moreDismissals++
@@ -400,9 +411,11 @@ func (s *Session) collectUntilQuiescence(ctx context.Context, dur, maxWait time.
 					s.mu.Unlock()
 					if stdin != nil {
 						io.WriteString(stdin, "\n") //nolint:errcheck
+						recentDismissal = true
 					}
 					continue
 				}
+				recentDismissal = false
 				return collected
 			}
 			time.Sleep(10 * time.Millisecond)

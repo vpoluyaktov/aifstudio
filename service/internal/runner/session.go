@@ -369,9 +369,12 @@ func (s *Session) Stop() {
 
 // collectUntilQuiescence reads from outCh until no output has arrived for dur,
 // until maxWait elapses, or until ctx is cancelled.
+// It transparently auto-dismisses [MORE] pagination prompts emitted by frob/TADS:
+// the prompt is stripped from the output and a newline is sent to continue.
 func (s *Session) collectUntilQuiescence(ctx context.Context, dur, maxWait time.Duration) string {
 	var sb strings.Builder
 	deadline := time.Now().Add(maxWait)
+	moreDismissals := 0
 	for {
 		select {
 		case chunk, ok := <-s.outCh:
@@ -386,7 +389,21 @@ func (s *Session) collectUntilQuiescence(ctx context.Context, dur, maxWait time.
 				return sb.String()
 			}
 			if s.quiesced(dur) {
-				return sb.String()
+				collected := sb.String()
+				if moreDismissals < 50 && isMorePrompt(collected) {
+					moreDismissals++
+					sb.Reset()
+					sb.WriteString(stripMoreSuffix(collected))
+					s.touchOutput()
+					s.mu.Lock()
+					stdin := s.stdin
+					s.mu.Unlock()
+					if stdin != nil {
+						io.WriteString(stdin, "\n") //nolint:errcheck
+					}
+					continue
+				}
+				return collected
 			}
 			time.Sleep(10 * time.Millisecond)
 		}

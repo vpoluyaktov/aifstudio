@@ -166,6 +166,53 @@ func TestInterpreterCommandByNameDfrotzFlags(t *testing.T) {
 	}
 }
 
+func TestIsMorePrompt(t *testing.T) {
+	yes := []string{
+		"some text\n[MORE]",
+		"some text\n[MORE]\n",
+		"some text [MORE]",
+		"[MORE]",
+		"[more]",
+		"[More]",
+		"text\r\n[MORE]\r\n",
+	}
+	no := []string{
+		"",
+		"some text",
+		"[MORE] followed by more text",
+		"some [MORE] in the middle",
+	}
+	for _, s := range yes {
+		if !isMorePrompt(s) {
+			t.Errorf("isMorePrompt(%q) = false; want true", s)
+		}
+	}
+	for _, s := range no {
+		if isMorePrompt(s) {
+			t.Errorf("isMorePrompt(%q) = true; want false", s)
+		}
+	}
+}
+
+func TestStripMoreSuffix(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"hello\n[MORE]", "hello\n"},
+		{"hello\n[MORE]\n", "hello\n"},
+		{"hello [MORE]  ", "hello\n"},
+		{"[MORE]", "\n"},
+		{"no more here", "no more here"},
+	}
+	for _, tc := range cases {
+		got := stripMoreSuffix(tc.in)
+		if got != tc.want {
+			t.Errorf("stripMoreSuffix(%q) = %q; want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestInterpreterCommandByNameConsistentWithSelectInterpreter(t *testing.T) {
 	// The command produced by interpreterCommandByName must have the same
 	// binary and flag set as the one produced by SelectInterpreter for the same

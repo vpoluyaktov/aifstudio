@@ -35,7 +35,7 @@
 
       <div id="error" class="auth-error" role="alert" style="display:none"></div>
 
-      <button id="submit" type="submit" class="auth-btn">[ CREATE ACCOUNT ]</button>
+      <button id="submit" type="submit" class="auth-btn">CREATE ACCOUNT</button>
     </form>
 
     <div class="auth-links">
@@ -224,7 +224,7 @@ form.addEventListener('submit', async function () {
     location.assign(nextParam());
   } catch (err) {
     submitEl.disabled    = false;
-    submitEl.textContent = '[ CREATE ACCOUNT ]';
+    submitEl.textContent = 'CREATE ACCOUNT';
     showError(err.message || 'Registration failed. Please try again.');
   }
 });

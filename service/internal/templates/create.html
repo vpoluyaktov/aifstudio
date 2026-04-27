@@ -48,7 +48,7 @@
       </div>
       <div class="form-actions">
         <button class="btn btn-primary" id="generateBtn" onclick="generateWithAI()">
-          [ GENERATE GAME ]
+          GENERATE GAME
         </button>
       </div>
     </div>
@@ -79,9 +79,9 @@ Instead of taking the red ball:
 
     <div class="form-actions">
       <button class="btn btn-primary" id="createBtn" onclick="createProject()">
-        [ CREATE PROJECT ]
+          CREATE PROJECT
       </button>
-      <a href="/" class="btn btn-secondary">[ ABORT ]</a>
+      <a href="/" class="btn btn-secondary">ABORT</a>
     </div>
   </div>
 
@@ -231,7 +231,7 @@ function generateWithAI() {
   }
 
   btn.disabled = true;
-  btn.textContent = '[ GENERATING... ]';
+  btn.textContent = 'GENERATING...';
 
   apiFetch('/api/projects', {
     method: 'POST',
@@ -241,7 +241,7 @@ function generateWithAI() {
     .then(function(res) {
       if (!res.ok) {
         btn.disabled = false;
-        btn.textContent = '[ GENERATE GAME ]';
+        btn.textContent = 'GENERATE GAME';
         var msg = res.data.error || 'Failed to create project';
         if (res.status === 401) msg = 'You must be signed in to create a project.';
         errEl.innerHTML = '<div class="error-msg">' + escHtml(msg) + '</div>';
@@ -251,7 +251,7 @@ function generateWithAI() {
     })
     .catch(function(err) {
       btn.disabled = false;
-      btn.textContent = '[ GENERATE GAME ]';
+      btn.textContent = 'GENERATE GAME';
       errEl.innerHTML = '<div class="error-msg">Request failed: ' + escHtml(err.message) + '</div>';
     });
 }
@@ -272,7 +272,7 @@ function createProject() {
   }
 
   btn.disabled = true;
-  btn.textContent = '[ CREATING... ]';
+  btn.textContent = 'CREATING...';
 
   apiFetch('/api/projects', {
     method: 'POST',
@@ -282,7 +282,7 @@ function createProject() {
     .then(function(res) {
       if (!res.ok) {
         btn.disabled = false;
-        btn.textContent = '[ CREATE PROJECT ]';
+        btn.textContent = 'CREATE PROJECT';
         var msg = res.data.error || 'Failed to create project';
         if (res.status === 401) msg = 'You must be signed in to create a project.';
         errEl.innerHTML = '<div class="error-msg">' + escHtml(msg) + '</div>';
@@ -292,7 +292,7 @@ function createProject() {
     })
     .catch(function(err) {
       btn.disabled = false;
-      btn.textContent = '[ CREATE PROJECT ]';
+      btn.textContent = 'CREATE PROJECT';
       errEl.innerHTML = '<div class="error-msg">Request failed: ' + escHtml(err.message) + '</div>';
     });
 }

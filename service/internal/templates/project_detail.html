@@ -50,8 +50,8 @@
       <div class="editor-toolbar">
         <span class="section-title">SOURCE EDITOR</span>
         <div class="editor-actions">
-          <button class="btn btn-secondary" id="saveBtn" onclick="saveSource()">[SAVE]</button>
-          <button class="btn btn-primary"   id="buildBtn" onclick="startBuild()">[BUILD]</button>
+          <button class="btn btn-secondary" id="saveBtn" onclick="saveSource()">SAVE</button>
+          <button class="btn btn-primary"   id="buildBtn" onclick="startBuild()">BUILD</button>
         </div>
       </div>
       <textarea id="sourceEditor" class="source-editor" spellcheck="false"></textarea>
@@ -411,7 +411,7 @@
         + '<span class="build-time">' + formatDate(b.createdAt) + '</span>'
         + (durStr ? '<span class="build-duration">' + durStr + '</span>' : '')
         + (b.status === 'succeeded'
-            ? '<span class="build-actions"><button class="btn btn-play" onclick="playBuild(\'' + escHtml(b.id) + '\',this)">[PLAY]</button></span>'
+            ? '<span class="build-actions"><button class="btn btn-play" onclick="playBuild(\'' + escHtml(b.id) + '\',this)">PLAY</button></span>'
             : '')
         + '</div>';
       if ((b.status === 'failed' || b.status === 'succeeded') && b.errorMessage) {
@@ -442,7 +442,7 @@
     var statusEl= document.getElementById('saveStatus');
 
     btn.disabled = true;
-    btn.textContent = '[SAVING...]';
+    btn.textContent = 'SAVING...';
     statusEl.className = 'save-status';
     statusEl.textContent = '';
 
@@ -453,7 +453,7 @@
       .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
       .then(function(res) {
         btn.disabled = false;
-        btn.textContent = '[SAVE]';
+        btn.textContent = 'SAVE';
         if (!res.ok) {
           statusEl.className = 'save-status error';
           statusEl.textContent = 'Save failed: ' + (res.data.error || 'unknown error');
@@ -473,7 +473,7 @@
       })
       .catch(function(err) {
         btn.disabled = false;
-        btn.textContent = '[SAVE]';
+        btn.textContent = 'SAVE';
         statusEl.className = 'save-status error';
         statusEl.textContent = 'Save failed: ' + err.message;
       });
@@ -483,7 +483,7 @@
   window.startBuild = function() {
     var btn = document.getElementById('buildBtn');
     btn.disabled = true;
-    btn.textContent = '[BUILDING...]';
+    btn.textContent = 'BUILDING...';
     errArea.innerHTML = '';
 
     apiFetch('/api/projects/' + encodeURIComponent(projectId) + '/builds', {
@@ -493,7 +493,7 @@
       .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d, status: r.status }; }); })
       .then(function(res) {
         btn.disabled = false;
-        btn.textContent = '[BUILD]';
+        btn.textContent = 'BUILD';
         if (!res.ok) {
           var msg = res.data.error || 'Build failed';
           if (res.status === 409) msg = 'A build is already in progress. Please wait.';
@@ -507,7 +507,7 @@
       })
       .catch(function(err) {
         btn.disabled = false;
-        btn.textContent = '[BUILD]';
+        btn.textContent = 'BUILD';
         errArea.innerHTML = '<div class="error-msg">Build request failed: ' + escHtml(err.message) + '</div>';
       });
   };
@@ -515,7 +515,7 @@
   // Play a succeeded build
   window.playBuild = function(buildId, btn) {
     btn.disabled = true;
-    btn.textContent = '[STARTING...]';
+    btn.textContent = 'STARTING...';
 
     apiFetch('/api/runs', {
       method: 'POST',
@@ -525,7 +525,7 @@
       .then(function(res) {
         if (!res.ok) {
           btn.disabled = false;
-          btn.textContent = '[PLAY]';
+          btn.textContent = 'PLAY';
           errArea.innerHTML = '<div class="error-msg">Could not start: ' + escHtml(res.data.error || 'error') + '</div>';
           return;
         }
@@ -533,7 +533,7 @@
       })
       .catch(function(err) {
         btn.disabled = false;
-        btn.textContent = '[PLAY]';
+        btn.textContent = 'PLAY';
         errArea.innerHTML = '<div class="error-msg">Failed: ' + escHtml(err.message) + '</div>';
       });
   };

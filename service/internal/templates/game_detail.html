@@ -299,7 +299,7 @@
     } else {
       var playBtn = document.createElement('button');
       playBtn.className = 'btn btn-play';
-      playBtn.textContent = '[ PLAY GAME ]';
+      playBtn.textContent = 'PLAY GAME';
       playBtn.onclick = function() { startPlay(g, playBtn); };
       actionsEl.appendChild(playBtn);
     }
@@ -323,7 +323,7 @@
 
   function startPlay(g, btn) {
     btn.classList.add('loading');
-    btn.textContent = '[ STARTING... ]';
+    btn.textContent = 'STARTING...';
 
     var body = { sourceType: 'ifdb', ifdbId: g.id };
     if (g.formats && g.formats.length) body.format = g.formats[0];
@@ -336,7 +336,7 @@
       .then(function(res) {
         if (!res.ok) {
           btn.classList.remove('loading');
-          btn.textContent = '[ PLAY GAME ]';
+          btn.textContent = 'PLAY GAME';
           var errEl = document.getElementById('errorState');
           errEl.innerHTML = '<div class="error-msg">Could not start game: ' + escHtml(res.data.error || 'unknown error') + '</div>';
           errEl.style.display = '';
@@ -346,7 +346,7 @@
       })
       .catch(function(err) {
         btn.classList.remove('loading');
-        btn.textContent = '[ PLAY GAME ]';
+        btn.textContent = 'PLAY GAME';
         var errEl = document.getElementById('errorState');
         errEl.innerHTML = '<div class="error-msg">Failed to start: ' + escHtml(err.message) + '</div>';
         errEl.style.display = '';

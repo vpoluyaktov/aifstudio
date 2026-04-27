@@ -26,7 +26,7 @@
 
       <div id="error" class="auth-error" role="alert" style="display:none"></div>
 
-      <button id="submit" type="submit" class="auth-btn">[ AUTHENTICATE ]</button>
+      <button id="submit" type="submit" class="auth-btn">AUTHENTICATE</button>
     </form>
 
     <div class="auth-links-row"></div>
@@ -207,7 +207,7 @@ form.addEventListener('submit', async function () {
     location.assign(nextParam());
   } catch (err) {
     submitEl.disabled    = false;
-    submitEl.textContent = '[ AUTHENTICATE ]';
+    submitEl.textContent = 'AUTHENTICATE';
     showError(err.message || 'Sign-in failed. Please try again.');
   }
 });

@@ -54,7 +54,7 @@
           <button class="btn btn-primary"   id="buildBtn" onclick="startBuild()">BUILD</button>
         </div>
       </div>
-      <textarea id="sourceEditor" class="source-editor" spellcheck="false"></textarea>
+      <div id="sourceEditor" class="source-editor"></div>
       <div id="saveStatus" class="save-status"></div>
     </div>
 
@@ -205,22 +205,20 @@
 
 .source-editor {
   width: 100%;
-  border: none;
-  border-radius: 0;
-  background: rgba(0,0,0,0.5);
-  color: var(--crt-fg);
-  font-family: 'Courier New', Consolas, 'Liberation Mono', monospace;
-  font-size: 14px;
-  line-height: 1.65;
   min-height: 360px;
-  resize: vertical;
-  padding: 1rem 1.25rem;
-  text-transform: none;
 }
-.source-editor:focus {
-  outline: none;
-  box-shadow: none;
-  border-color: transparent;
+#sourceEditor .cm-editor {
+  min-height: 360px;
+  font-size: 14px;
+}
+#sourceEditor .cm-editor.cm-focused { outline: none; }
+#sourceEditor .cm-scroller {
+  font-family: 'Courier New', Consolas, 'Liberation Mono', monospace;
+  line-height: 1.65;
+}
+#sourceEditor .cm-gutters {
+  background: rgba(0,0,0,0.4);
+  border-right: 1px solid rgba(120,255,175,0.15);
 }
 
 .save-status {
@@ -319,7 +317,100 @@
 {{end}}
 
 {{define "scripts"}}
-<script>
+<script type="module">
+import { EditorView, lineNumbers, highlightSpecialChars, drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightActiveLine, keymap } from "https://esm.sh/@codemirror/view@6";
+import { EditorState } from "https://esm.sh/@codemirror/state@6";
+import { defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching, foldGutter, foldKeymap, StreamLanguage, HighlightStyle } from "https://esm.sh/@codemirror/language@6";
+import { defaultKeymap, history, historyKeymap } from "https://esm.sh/@codemirror/commands@6";
+import { searchKeymap, highlightSelectionMatches } from "https://esm.sh/@codemirror/search@6";
+import { closeBrackets, closeBracketsKeymap } from "https://esm.sh/@codemirror/autocomplete@6";
+import { tags } from "https://esm.sh/@lezer/highlight@1";
+
+const inform7Language = StreamLanguage.define({
+  name: "inform7",
+  startState() { return { inComment: false }; },
+  copyState(state) { return { inComment: state.inComment }; },
+  token(stream, state) {
+    if (state.inComment) {
+      while (!stream.eol()) {
+        if (stream.next() === ']') { state.inComment = false; break; }
+      }
+      return "comment";
+    }
+    if (stream.peek() === '[') {
+      stream.next();
+      var closed = false;
+      while (!stream.eol()) { if (stream.next() === ']') { closed = true; break; } }
+      if (!closed) state.inComment = true;
+      return "comment";
+    }
+    if (stream.peek() === '"') {
+      stream.next();
+      while (!stream.eol()) { if (stream.next() === '"') break; }
+      return "string";
+    }
+    if (stream.sol() && stream.match(/^(Volume|Book|Part|Chapter|Section)\b.*$/)) return "keyword";
+    if (stream.sol() && stream.match(/^(Instead of|Before|After|When|Every turn|Carry out|Report|Check|To say|To decide|Understand)\b/i)) return "keyword";
+    if (stream.match(/^(true|false|yes|no)\b/)) return "atom";
+    if (stream.match(/^\d+/)) return "number";
+    stream.next();
+    return null;
+  }
+});
+
+const inform7HighlightStyle = HighlightStyle.define([
+  { tag: tags.keyword, color: '#60d6fa' },
+  { tag: tags.string,  color: '#a5d6a7' },
+  { tag: tags.comment, color: '#6a737d', fontStyle: 'italic' },
+  { tag: tags.number,  color: '#f8c555' },
+  { tag: tags.atom,    color: '#c3e88d' },
+]);
+
+var cmEditor = new EditorView({
+  state: EditorState.create({
+    doc: '',
+    extensions: [
+      lineNumbers(),
+      highlightSpecialChars(),
+      history(),
+      drawSelection(),
+      dropCursor(),
+      EditorState.allowMultipleSelections.of(true),
+      indentOnInput(),
+      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      bracketMatching(),
+      closeBrackets(),
+      rectangularSelection(),
+      crosshairCursor(),
+      highlightActiveLine(),
+      highlightSelectionMatches(),
+      EditorView.lineWrapping,
+      keymap.of([
+        ...closeBracketsKeymap,
+        ...defaultKeymap,
+        ...searchKeymap,
+        ...historyKeymap,
+        ...foldKeymap,
+      ]),
+      inform7Language,
+      syntaxHighlighting(inform7HighlightStyle),
+      EditorView.theme({
+        '&': { background: '#0a0d14', height: '100%' },
+        '.cm-content': { caretColor: '#e6edf3' },
+        '&.cm-focused .cm-cursor': { borderLeftColor: '#e6edf3' },
+        '.cm-selectionBackground, ::selection': { background: 'rgba(167,139,250,0.25)' },
+        '&.cm-focused .cm-selectionBackground': { background: 'rgba(167,139,250,0.25)' },
+      }, { dark: true }),
+    ]
+  }),
+  parent: document.getElementById('sourceEditor'),
+});
+
+function getEditorContent() { return cmEditor.state.doc.toString(); }
+function setEditorContent(text) {
+  cmEditor.dispatch({ changes: { from: 0, to: cmEditor.state.doc.length, insert: text || '' } });
+}
+
 (function() {
   var root      = document.getElementById('pageRoot');
   var projectId = root.getAttribute('data-project-id');
@@ -361,10 +452,10 @@
     if (project.sourceUrl) {
       fetch(project.sourceUrl)
         .then(function(r) { return r.ok ? r.text() : ''; })
-        .then(function(src) { document.getElementById('sourceEditor').value = src || ''; })
+        .then(function(src) { setEditorContent(src || ''); })
         .catch(function() {});
     } else {
-      document.getElementById('sourceEditor').value = '';
+      setEditorContent('');
     }
     // Show AI Workspace link
     var aiLink = document.getElementById('aiWorkspaceLink');
@@ -437,7 +528,7 @@
 
   // Save source
   window.saveSource = function() {
-    var source  = document.getElementById('sourceEditor').value;
+    var source  = getEditorContent();
     var btn     = document.getElementById('saveBtn');
     var statusEl= document.getElementById('saveStatus');
 

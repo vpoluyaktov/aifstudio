@@ -67,7 +67,7 @@
       '<div class="proj-card-desc">' + escHtml(descTrunc) + '</div>' +
       (updatedLabel ? '<div class="proj-card-meta">' + escHtml(updatedLabel) + '</div>' : '') +
       '<div class="proj-card-actions">' +
-        '<a class="btn-ai" href="/projects/' + encodeURIComponent(p.id) + '/ai">🤖 Open AI Workspace</a>' +
+        '<a class="btn-ai" href="/projects/' + encodeURIComponent(p.id) + '/ai">Open AI Workspace</a>' +
         '<a class="btn-view" href="/projects/' + encodeURIComponent(p.id) + '">View</a>' +
         '<button class="btn-delete-proj" data-id="' + escHtml(p.id) + '" data-name="' + escHtml(p.name) + '" title="Delete project">🗑</button>' +
       '</div>';

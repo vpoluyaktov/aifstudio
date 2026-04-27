@@ -415,7 +415,6 @@ func (s *Session) collectUntilQuiescence(ctx context.Context, dur, maxWait time.
 					}
 					continue
 				}
-				recentDismissal = false
 				return collected
 			}
 			time.Sleep(10 * time.Millisecond)

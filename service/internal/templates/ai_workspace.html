@@ -175,25 +175,38 @@ body.workspace-page > .footer { display: none; }
   cursor: pointer;
   width: auto;
 }
-.ws-source-editor {
+#wsSourceEditor {
   flex: 1;
-  width: 100%;
-  border: none;
-  border-radius: 0;
-  background: #0a0d14;
-  color: #e6edf3;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+#wsSourceEditor .cm-editor {
+  flex: 1;
+  height: 100%;
   font-family: 'Courier New', Consolas, 'Liberation Mono', monospace;
   font-size: 0.84rem;
   line-height: 1.65;
-  resize: none;
-  padding: 0.85rem 1rem;
-  overflow-y: auto;
-  min-height: 0;
+  background: #0a0d14;
+}
+#wsSourceEditor .cm-scroller {
+  overflow: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
+  background: #0a0d14;
 }
-.ws-source-editor:focus { outline: none; box-shadow: none; }
-.ws-source-editor[readonly] { color: rgba(230,237,243,0.75); cursor: default; }
+#wsSourceEditor .cm-content {
+  padding: 0.85rem 1rem;
+  color: #e6edf3;
+}
+#wsSourceEditor .cm-cursor { border-left-color: #e6edf3; }
+#wsSourceEditor .cm-activeLine { background: rgba(255,255,255,0.04); }
+#wsSourceEditor .cm-gutters {
+  background: #0a0d14;
+  border-right: 1px solid var(--border);
+  color: var(--muted);
+}
 .ws-source-hint {
   padding: 0.28rem 1rem;
   font-size: 0.73rem;
@@ -465,7 +478,7 @@ body.workspace-page > .footer { display: none; }
     flex: 1;
     max-height: 100%;
   }
-  .ws-source-panel.collapsed .ws-source-editor,
+  .ws-source-panel.collapsed #wsSourceEditor,
   .ws-source-panel.collapsed .ws-source-hint,
   .ws-test-panel.collapsed .ws-test-output,
   .ws-test-panel.collapsed .ws-test-result,
@@ -745,13 +758,7 @@ body.workspace-page > .footer { display: none; }
             </label>
           </div>
         </div>
-        <textarea
-          id="wsSourceEditor"
-          class="ws-source-editor"
-          readonly
-          spellcheck="false"
-          placeholder="Your Inform 7 source will appear here…"
-        ></textarea>
+        <div id="wsSourceEditor"></div>
         <div class="ws-source-hint" id="wsSourceHint"></div>
       </div>
 
@@ -835,5 +842,5 @@ body.workspace-page > .footer { display: none; }
 {{end}}
 
 {{define "scripts"}}
-<script src="/static/ai_workspace.js?v={{.Version}}"></script>
+<script type="module" src="/static/ai_workspace.js?v={{.Version}}"></script>
 {{end}}

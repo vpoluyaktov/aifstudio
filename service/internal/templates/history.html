@@ -180,10 +180,10 @@
       actionsHtml += '<a class="btn btn-primary btn-sm" href="/play/' + escHtml(run.id) + '">&gt; Continue</a>';
     }
     if (canRestart) {
-      actionsHtml += '<button class="btn btn-secondary btn-sm btn-restart" data-id="' + escHtml(run.id) + '">[RESTART]</button>';
+      actionsHtml += '<button class="btn btn-secondary btn-sm btn-restart" data-id="' + escHtml(run.id) + '">RESTART</button>';
     }
     if (canDelete) {
-      actionsHtml += '<button class="btn btn-danger btn-sm btn-delete" data-id="' + escHtml(run.id) + '">[DEL]</button>';
+      actionsHtml += '<button class="btn btn-danger btn-sm btn-delete" data-id="' + escHtml(run.id) + '">DELETE</button>';
     }
 
     card.innerHTML =
@@ -205,7 +205,7 @@
         .then(function(res) {
           if (!res.ok) {
             restartBtn.disabled = false;
-            restartBtn.textContent = '[RESTART]';
+            restartBtn.textContent = 'RESTART';
             alert('Restart failed: ' + ((res.data && res.data.error) || 'unknown error'));
             return;
           }
@@ -213,7 +213,7 @@
         })
         .catch(function(err) {
           restartBtn.disabled = false;
-          restartBtn.textContent = '[RST]';
+          restartBtn.textContent = 'RESTART';
           alert('Restart failed: ' + err.message);
         });
     });

@@ -453,19 +453,21 @@ func (s *Server) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	rawReply := buf.String()
 	newSource, reply, xerr := openaiPkg.ExtractFencedInform7(rawReply)
 	if xerr != nil {
-		slog.Warn("handleAIChat: no_fence",
-			"turn_id", turnID,
-			"project_id", id,
-			"raw_len", len(rawReply),
-			"raw_head", headPreview(rawReply, 2000),
-		)
-		sendSSE(w, flusher, "error", map[string]string{"code": "no_fence", "error": xerr.Error()})
-		turn.Error = xerr.Error()
+		// No fence = conversational reply with no source change. This is valid
+		// when the AI is answering a question rather than editing code.
+		finishedAt := time.Now().UTC()
 		turn.SourceAfter = sourceBefore
 		turn.AssistantReply = rawReply
+		turn.ModelFinishedAt = finishedAt
 		if werr := s.store.CreateAITurn(r.Context(), turn); werr != nil {
-			slog.Error("handleAIChat: write no-fence turn", "err", werr)
+			slog.Error("handleAIChat: write conversational turn", "err", werr)
 		}
+		sendSSE(w, flusher, "done", map[string]interface{}{
+			"assistantReply":   rawReply,
+			"promptTokens":     turn.PromptTokens,
+			"completionTokens": turn.CompletionTokens,
+			"model":            s.cfg.OpenAIModel,
+		})
 		return
 	}
 	if len(newSource) > 500000 {

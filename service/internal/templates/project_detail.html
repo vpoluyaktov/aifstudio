@@ -55,7 +55,10 @@
         </div>
       </div>
       <div id="sourceEditor" class="source-editor"></div>
-      <div id="saveStatus" class="save-status"></div>
+      <div class="editor-footer">
+        <div id="saveStatus" class="save-status"></div>
+        <div id="buildStatus" class="build-status-inline" style="display:none"></div>
+      </div>
     </div>
 
     <div class="builds-section">
@@ -222,9 +225,15 @@
   border-right: 1px solid rgba(120,255,175,0.15);
 }
 
-.save-status {
+.editor-footer {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+  padding: 0 1rem;
   min-height: 28px;
-  padding: 0.3rem 1rem;
+}
+.save-status {
+  padding: 0.3rem 0;
   font-family: var(--pixel-mono);
   font-size: 14px;
   text-transform: uppercase;
@@ -233,6 +242,21 @@
 }
 .save-status.success { color: var(--crt-fg); }
 .save-status.error   { color: var(--crt-red); }
+
+.build-status-inline {
+  padding: 0.3rem 0;
+  font-family: var(--pixel-mono);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.build-status-inline.running { color: var(--crt-fg); animation: crt-blink 1s step-end infinite; }
+.build-status-inline.pending { color: var(--crt-amber); }
+.build-status-inline.succeeded { color: var(--crt-fg); animation: none; }
+.build-status-inline.failed { color: var(--crt-red); animation: none; }
 
 /* Builds section */
 .section-title {
@@ -514,9 +538,20 @@ function setEditorContent(text) {
     area.innerHTML = html;
   }
 
+  function setBuildStatus(b) {
+    var el = document.getElementById('buildStatus');
+    if (!b) { el.style.display = 'none'; el.textContent = ''; el.className = 'build-status-inline'; return; }
+    var labels = { pending: '[PENDING] Waiting in queue…', running: '[BUILDING] Compiling…',
+                   succeeded: '[BUILD OK]', failed: '[BUILD FAILED]', cancelled: '[CANCELLED]' };
+    el.textContent = labels[b.status] || '[' + b.status.toUpperCase() + ']';
+    el.className = 'build-status-inline ' + b.status;
+    el.style.display = 'flex';
+  }
+
   function scheduleRefresh(b) {
     clearTimeout(refreshTimer);
     var spinner = document.getElementById('buildSpinner');
+    setBuildStatus(b);
     if (b.status === 'pending' || b.status === 'running') {
       spinner.style.display = '';
       refreshTimer = setTimeout(function() {
@@ -524,6 +559,7 @@ function setEditorContent(text) {
       }, 5000);
     } else {
       spinner.style.display = 'none';
+      setTimeout(function() { setBuildStatus(null); }, 6000);
     }
   }
 
@@ -577,6 +613,7 @@ function setEditorContent(text) {
     btn.disabled = true;
     btn.textContent = 'BUILDING...';
     errArea.innerHTML = '';
+    setBuildStatus({ status: 'pending' });
 
     apiFetch('/api/projects/' + encodeURIComponent(projectId) + '/builds', {
       method: 'POST',
@@ -589,6 +626,7 @@ function setEditorContent(text) {
         if (!res.ok) {
           var msg = res.data.error || 'Build failed';
           if (res.status === 409) msg = 'A build is already in progress. Please wait.';
+          setBuildStatus(null);
           errArea.innerHTML = '<div class="error-msg">' + escHtml(msg) + '</div>';
           return;
         }
@@ -596,10 +634,12 @@ function setEditorContent(text) {
         if (project) project.latestBuildId = res.data.id;
         renderBuilds([res.data]);
         scheduleRefresh(res.data);
+        document.querySelector('.builds-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       })
       .catch(function(err) {
         btn.disabled = false;
         btn.textContent = 'BUILD';
+        setBuildStatus(null);
         errArea.innerHTML = '<div class="error-msg">Build request failed: ' + escHtml(err.message) + '</div>';
       });
   };

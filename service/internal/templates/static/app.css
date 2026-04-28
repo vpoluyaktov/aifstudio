@@ -9,7 +9,7 @@
   --crt-amber:   #ff8c00;
   --crt-blue:    #a8d4ff;
   --crt-red:     #ff5555;
-  --pixel-mono:  'VT323', monospace;
+  --pixel-mono:  'IBM Plex Mono', monospace;
 
   /* legacy aliases kept for compatibility */
   --bg:        #010805;
@@ -39,7 +39,7 @@ body {
   );
   color: var(--crt-fg);
   font-family: var(--pixel-mono);
-  font-size: 20px;
+  font-size: 17px;
   line-height: 1.5;
   text-transform: uppercase;
   height: 100dvh;
@@ -90,7 +90,7 @@ body.play-page .crt-frame-content {
 }
 .crt-frame-termname {
   font-family: var(--pixel-mono);
-  font-size: 17px;
+  font-size: 14px;
   color: #a8d4ff;
   letter-spacing: 1.5px;
   text-shadow: 0 0 6px rgba(168,212,255,0.4);
@@ -129,7 +129,7 @@ body.play-page .crt-frame-content {
 }
 .crt-ind-label {
   font-family: var(--pixel-mono);
-  font-size: 13px;
+  font-size: 11px;
   color: rgba(168,212,255,0.65);
   letter-spacing: 0.5px;
   user-select: none;
@@ -163,7 +163,7 @@ a:hover { color: var(--crt-fg); text-decoration: none; }
 }
 .nav-brand {
   font-family: var(--pixel-mono);
-  font-size: 20px;
+  font-size: 17px;
   letter-spacing: 2px;
   color: var(--crt-blue);
   text-decoration: none;
@@ -174,7 +174,7 @@ a:hover { color: var(--crt-fg); text-decoration: none; }
 .nav-links a {
   color: var(--crt-dim);
   font-family: var(--pixel-mono);
-  font-size: 18px;
+  font-size: 15px;
   text-transform: uppercase;
   letter-spacing: 1px;
   transition: color 0.15s;
@@ -192,7 +192,7 @@ a:hover { color: var(--crt-fg); text-decoration: none; }
 }
 .nav-user {
   font-family: var(--pixel-mono);
-  font-size: 16px;
+  font-size: 14px;
   color: rgba(120,255,175,0.4);
   white-space: nowrap;
   overflow: hidden;
@@ -202,7 +202,7 @@ a:hover { color: var(--crt-fg); text-decoration: none; }
 }
 .nav-signout {
   font-family: var(--pixel-mono);
-  font-size: 16px;
+  font-size: 14px;
   text-transform: uppercase;
   letter-spacing: 1px;
   background: rgba(120,255,175,0.08);
@@ -250,7 +250,7 @@ a:hover { color: var(--crt-fg); text-decoration: none; }
 .nav-user-dropdown-email {
   padding: 0.6rem 1rem;
   font-family: var(--pixel-mono);
-  font-size: 15px;
+  font-size: 13px;
   color: rgba(120,255,175,0.4);
   word-break: break-all;
   border-bottom: 1px solid var(--crt-border);
@@ -259,7 +259,7 @@ a:hover { color: var(--crt-fg); text-decoration: none; }
 .nav-user-dropdown-signout {
   margin: 0.4rem 0.75rem 0.25rem;
   font-family: var(--pixel-mono);
-  font-size: 16px;
+  font-size: 14px;
   text-transform: uppercase;
   background: rgba(120,255,175,0.08);
   border: 1px solid rgba(120,255,175,0.4);
@@ -318,7 +318,7 @@ a:hover { color: var(--crt-fg); text-decoration: none; }
   padding: 0.85rem 1.5rem;
   color: var(--crt-dim);
   font-family: var(--pixel-mono);
-  font-size: 18px;
+  font-size: 15px;
   text-transform: uppercase;
   letter-spacing: 1px;
   text-decoration: none;
@@ -338,7 +338,7 @@ a:hover { color: var(--crt-fg); text-decoration: none; }
   padding: 1rem;
   color: rgba(120,255,175,0.35);
   font-family: var(--pixel-mono);
-  font-size: 15px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 1px;
   border-top: 1px solid var(--crt-border);
@@ -355,7 +355,7 @@ a:hover { color: var(--crt-fg); text-decoration: none; }
   border-radius: 2px;
   border: 1px solid rgba(120,255,175,0.4);
   font-family: var(--pixel-mono);
-  font-size: 20px;
+  font-size: 17px;
   font-weight: normal;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -401,14 +401,14 @@ a:hover { color: var(--crt-fg); text-decoration: none; }
   border-color: var(--crt-fg);
   color: var(--crt-fg);
   background: rgba(120,255,175,0.08);
-  font-size: 22px;
+  font-size: 19px;
   padding: 0.5rem 1.8rem;
 }
 .btn-play:hover { background: rgba(120,255,175,0.18); border-color: var(--crt-fg); }
 
 /* Small buttons */
 .btn-sm {
-  font-size: 18px;
+  font-size: 15px;
   padding: 0.25rem 0.8rem;
 }
 
@@ -419,7 +419,7 @@ input[type="email"],
 input[type="password"],
 textarea {
   font-family: var(--pixel-mono);
-  font-size: 20px;
+  font-size: 17px;
   text-transform: uppercase;
   background: transparent;
   border: none;
@@ -461,7 +461,7 @@ input::placeholder, textarea::placeholder { color: rgba(120,255,175,0.3); }
 .badge {
   display: inline-block;
   font-family: var(--pixel-mono);
-  font-size: 17px;
+  font-size: 14px;
   font-weight: normal;
   letter-spacing: 1px;
   text-transform: uppercase;
@@ -496,14 +496,14 @@ input::placeholder, textarea::placeholder { color: rgba(120,255,175,0.3); }
   padding: 3rem 1rem;
   color: var(--crt-dim);
   font-family: var(--pixel-mono);
-  font-size: 20px;
+  font-size: 17px;
 }
 .empty-state .icon { font-size: 2rem; margin-bottom: 0.75rem; opacity: 0.5; }
 
 /* ── Error state ── */
 .error-msg {
   font-family: var(--pixel-mono);
-  font-size: 18px;
+  font-size: 15px;
   color: var(--crt-red);
   border: 1px solid rgba(255,85,85,0.35);
   background: rgba(255,85,85,0.06);
@@ -520,7 +520,7 @@ input::placeholder, textarea::placeholder { color: rgba(120,255,175,0.3); }
   padding: 2.5rem;
   color: var(--crt-dim);
   font-family: var(--pixel-mono);
-  font-size: 20px;
+  font-size: 17px;
 }
 
 /* ── Responsive ── */

@@ -74,7 +74,7 @@
 {{define "head"}}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
 /* visualViewport.height shrinks when the iOS keyboard appears (window.innerHeight
    does not). visualViewport.offsetTop reports how far Safari has scrolled the
@@ -113,7 +113,7 @@
   --crt-dim:    #6fe69a;
   --crt-border: rgba(120,255,175,0.18);
   --crt-glow:   0 0 10px rgba(60,255,140,0.14), 0 0 2px rgba(60,255,140,0.22);
-  --pixel-mono: "VT323", ui-monospace, "Courier New", monospace;
+  --pixel-mono: 'IBM Plex Mono', monospace;
 }
 
 /* Override layout for full-height terminal */
@@ -156,13 +156,13 @@ body.play-page > .footer {
   background: #0a1f10;
   border-bottom: 1px solid rgba(120,255,175,0.12);
   font-family: var(--pixel-mono);
-  font-size: 17px;
+  font-size: 14px;
   flex-shrink: 0;
   text-transform: uppercase;
 }
 .crt-terminal-name-top {
   font-family: var(--pixel-mono);
-  font-size: 17px;
+  font-size: 14px;
   color: #a8d4ff;
   letter-spacing: 1.5px;
   text-shadow: 0 0 6px rgba(168,212,255,0.4);
@@ -175,7 +175,7 @@ body.play-page > .footer {
   color: rgba(120,255,175,0.4);
   text-decoration: none;
   font-family: var(--pixel-mono);
-  font-size: 17px;
+  font-size: 14px;
   transition: color 0.2s;
 }
 .term-exit-link:hover { color: #f85149; text-decoration: none; }
@@ -210,7 +210,7 @@ body.play-page > .footer {
   scrollbar-width: thin;
   scrollbar-color: rgba(0,255,136,0.2) transparent;
   font-family: var(--pixel-mono);
-  font-size: 20px;
+  font-size: 17px;
   line-height: 1.15;
   letter-spacing: 0.3px;
   -webkit-font-smoothing: none;
@@ -259,12 +259,12 @@ body.play-page > .footer {
   background: rgba(4,17,11,0.95);
   flex-shrink: 0;
   font-family: var(--pixel-mono);
-  font-size: 20px;
+  font-size: 17px;
 }
 .term-prompt {
   color: var(--crt-fg);
   font-weight: 400;
-  font-size: 20px;
+  font-size: 17px;
   user-select: none;
   text-shadow: var(--crt-glow);
 }
@@ -275,7 +275,7 @@ body.play-page > .footer {
   outline: none;
   color: var(--crt-fg);
   font-family: var(--pixel-mono);
-  font-size: 20px;
+  font-size: 17px;
   caret-color: var(--crt-fg);
   padding: 0;
   text-shadow: var(--crt-glow);
@@ -301,7 +301,7 @@ input[type="text"].term-input:focus {
   border: none;
   cursor: pointer;
   font-family: var(--pixel-mono);
-  font-size: 17px;
+  font-size: 14px;
   line-height: 1;
   padding: 0.2rem 0.1rem;
   opacity: 0.4;
@@ -330,7 +330,7 @@ input[type="text"].term-input:focus {
   color: var(--crt-fg);
   text-shadow: var(--crt-glow);
   font-family: var(--pixel-mono);
-  font-size: 20px;
+  font-size: 17px;
   line-height: 1;
   animation: blink 1s step-start infinite;
   user-select: none;
@@ -379,7 +379,7 @@ input[type="text"].term-input:focus {
 }
 .crt-floppy-label {
   font-family: var(--pixel-mono);
-  font-size: 13px;
+  font-size: 11px;
   color: rgba(168,212,255,0.65);
   letter-spacing: 0.5px;
   user-select: none;

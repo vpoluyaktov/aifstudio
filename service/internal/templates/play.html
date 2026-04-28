@@ -259,12 +259,12 @@ body.play-page > .footer {
   background: rgba(4,17,11,0.95);
   flex-shrink: 0;
   font-family: var(--pixel-mono);
-  font-size: 17px;
+  font-size: 15px;
 }
 .term-prompt {
   color: var(--crt-fg);
   font-weight: 400;
-  font-size: 17px;
+  font-size: 15px;
   user-select: none;
   text-shadow: var(--crt-glow);
 }
@@ -275,7 +275,7 @@ body.play-page > .footer {
   outline: none;
   color: var(--crt-fg);
   font-family: var(--pixel-mono);
-  font-size: 17px;
+  font-size: 15px;
   caret-color: var(--crt-fg);
   padding: 0;
   text-shadow: var(--crt-glow);
@@ -330,7 +330,7 @@ input[type="text"].term-input:focus {
   color: var(--crt-fg);
   text-shadow: var(--crt-glow);
   font-family: var(--pixel-mono);
-  font-size: 17px;
+  font-size: 15px;
   line-height: 1;
   animation: blink 1s step-start infinite;
   user-select: none;
@@ -404,6 +404,13 @@ input[type="text"].term-input:focus {
 .led-dtr.led-on {
   background: #ff8c00;
   box-shadow: 0 0 6px rgba(255,140,0,0.9), 0 0 2px #ff8c00;
+}
+
+@media (max-width: 600px) {
+  .term-input-row { font-size: 12px; }
+  .term-prompt { font-size: 12px; }
+  .term-input { font-size: 12px; }
+  .crt-cursor { font-size: 12px; }
 }
 </style>
 {{end}}

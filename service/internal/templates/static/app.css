@@ -533,4 +533,9 @@ input::placeholder, textarea::placeholder { color: rgba(120,255,175,0.3); }
   .nav-signout { display: none; }
   .nav-user-icon-btn { display: flex; align-items: center; justify-content: center; }
   .main { padding: 1.25rem 1rem; }
+  .nav-brand { font-size: 15px; }
+  .nav-mobile-dropdown a { font-size: 14px; }
+  .btn { font-size: 14px; }
+  .btn-sm { font-size: 12px; }
+  .btn-play { font-size: 15px; }
 }

@@ -42,7 +42,7 @@
 .crt-page-header { padding: 2.5rem 0 1.5rem; }
 .crt-page-title {
   font-family: var(--pixel-mono);
-  font-size: clamp(19px, 5vw, 30px);
+  font-size: clamp(17.10px, 4.50vw, 27.00px);
   color: var(--crt-blue);
   letter-spacing: 3px;
   text-transform: uppercase;
@@ -261,6 +261,12 @@
 .continue-badge-running   { color: var(--crt-fg); }
 .continue-badge-suspended { color: var(--crt-amber); }
 .continue-badge-finished  { color: var(--crt-dim); opacity: 0.7; }
+
+@media (max-width: 600px) {
+  .crt-page-title { font-size: 15.39px; }
+  .crt-search-prompt { font-size: 12.00px; }
+  .crt-search-input { font-size: 12.00px; }
+}
 </style>
 {{end}}
 

@@ -44,7 +44,8 @@
 }
 .proj-title {
   font-family: var(--pixel-mono);
-  font-size: 24px;
+  font-size: clamp(17.10px, 4.50vw, 27.00px);
+  font-weight: normal;
   color: var(--crt-blue);
   text-transform: uppercase;
   letter-spacing: 2px;
@@ -194,6 +195,7 @@
 @media (max-width: 600px) {
   .proj-grid   { grid-template-columns: 1fr; }
   .proj-header { flex-direction: column; }
+  .proj-title { font-size: 15.39px; }
 }
 </style>
 {{end}}

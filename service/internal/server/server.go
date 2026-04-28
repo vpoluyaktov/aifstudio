@@ -5,7 +5,9 @@ import (
 	"context"
 	"html/template"
 	"io/fs"
+	"math/rand"
 	"net/http"
+	"strconv"
 
 	"aifstudio/internal/auth"
 	"aifstudio/internal/config"
@@ -40,15 +42,16 @@ type TemplateSet struct {
 
 // Server holds all handler dependencies wired by main.go.
 type Server struct {
-	cfg        *config.Config
-	store      store.Store
-	ifdbClient *ifdb.Client
-	runner     *runner.Manager
-	builder    BuilderService
-	auth       auth.VerifierIface
-	tmpl       *TemplateSet
-	openai     *openaiClient.Client
-	aiLimiter  *aiUserLimiter
+	cfg         *config.Config
+	store       store.Store
+	ifdbClient  *ifdb.Client
+	runner      *runner.Manager
+	builder     BuilderService
+	auth        auth.VerifierIface
+	tmpl        *TemplateSet
+	openai      *openaiClient.Client
+	aiLimiter   *aiUserLimiter
+	cacheBuster string
 }
 
 // New creates a Server with all dependencies and parses all HTML templates.
@@ -63,15 +66,16 @@ func New(cfg *config.Config, st store.Store, ifdbClient *ifdb.Client, runMgr *ru
 		Timeout: cfg.OpenAITimeout,
 	})
 	return &Server{
-		cfg:        cfg,
-		store:      st,
-		ifdbClient: ifdbClient,
-		runner:     runMgr,
-		builder:    buildMgr,
-		auth:       a,
-		tmpl:       parseTemplates(),
-		openai:     oai,
-		aiLimiter:  newAIUserLimiter(cfg.AIRateLimitPerUserQPS, cfg.AIRateLimitPerUserBurst),
+		cfg:         cfg,
+		store:       st,
+		ifdbClient:  ifdbClient,
+		runner:      runMgr,
+		builder:     buildMgr,
+		auth:        a,
+		tmpl:        parseTemplates(),
+		openai:      oai,
+		aiLimiter:   newAIUserLimiter(cfg.AIRateLimitPerUserQPS, cfg.AIRateLimitPerUserBurst),
+		cacheBuster: strconv.FormatUint(rand.Uint64(), 36),
 	}
 }
 

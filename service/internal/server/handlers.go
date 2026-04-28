@@ -12,6 +12,7 @@ import (
 type pageData struct {
 	Version     string
 	Environment string
+	CacheBuster string
 }
 
 // ── Health ──────────────────────────────────────────────────────────────────
@@ -44,6 +45,7 @@ func (s *Server) handlePageIndex(w http.ResponseWriter, r *http.Request) {
 	data := pageData{
 		Version:     s.cfg.Version,
 		Environment: s.cfg.Environment,
+		CacheBuster: s.cacheBuster,
 	}
 	if err := s.tmpl.Index.Execute(w, data); err != nil {
 		log.Printf("handlePageIndex template error: %v", err)
@@ -63,6 +65,7 @@ func (s *Server) handlePageGameDetail(w http.ResponseWriter, r *http.Request) {
 		pageData: pageData{
 			Version:     s.cfg.Version,
 			Environment: s.cfg.Environment,
+			CacheBuster: s.cacheBuster,
 		},
 		IfdbId: r.PathValue("ifdbId"),
 	}
@@ -84,6 +87,7 @@ func (s *Server) handlePagePlay(w http.ResponseWriter, r *http.Request) {
 		pageData: pageData{
 			Version:     s.cfg.Version,
 			Environment: s.cfg.Environment,
+			CacheBuster: s.cacheBuster,
 		},
 		RunId: r.PathValue("runId"),
 	}
@@ -98,6 +102,7 @@ func (s *Server) handlePageCreate(w http.ResponseWriter, r *http.Request) {
 	data := pageData{
 		Version:     s.cfg.Version,
 		Environment: s.cfg.Environment,
+		CacheBuster: s.cacheBuster,
 	}
 	if err := s.tmpl.Create.Execute(w, data); err != nil {
 		log.Printf("handlePageCreate template error: %v", err)
@@ -116,6 +121,7 @@ func (s *Server) handlePageHistory(w http.ResponseWriter, r *http.Request) {
 	data := pageData{
 		Version:     s.cfg.Version,
 		Environment: s.cfg.Environment,
+		CacheBuster: s.cacheBuster,
 	}
 	if err := s.tmpl.History.Execute(w, data); err != nil {
 		log.Printf("handlePageHistory template error: %v", err)
@@ -129,6 +135,7 @@ func (s *Server) handlePageProjectDetail(w http.ResponseWriter, r *http.Request)
 		pageData: pageData{
 			Version:     s.cfg.Version,
 			Environment: s.cfg.Environment,
+			CacheBuster: s.cacheBuster,
 		},
 		ProjectId: r.PathValue("id"),
 	}
@@ -144,6 +151,7 @@ func (s *Server) handlePageLogin(w http.ResponseWriter, r *http.Request) {
 	data := pageData{
 		Version:     s.cfg.Version,
 		Environment: s.cfg.Environment,
+		CacheBuster: s.cacheBuster,
 	}
 	if err := s.tmpl.Login.Execute(w, data); err != nil {
 		log.Printf("handlePageLogin template error: %v", err)
@@ -156,6 +164,7 @@ func (s *Server) handlePageProjects(w http.ResponseWriter, r *http.Request) {
 	data := pageData{
 		Version:     s.cfg.Version,
 		Environment: s.cfg.Environment,
+		CacheBuster: s.cacheBuster,
 	}
 	if err := s.tmpl.Projects.Execute(w, data); err != nil {
 		log.Printf("handlePageProjects template error: %v", err)
@@ -169,6 +178,7 @@ func (s *Server) handlePageRegister(w http.ResponseWriter, r *http.Request) {
 	data := pageData{
 		Version:     s.cfg.Version,
 		Environment: s.cfg.Environment,
+		CacheBuster: s.cacheBuster,
 	}
 	if err := s.tmpl.Register.Execute(w, data); err != nil {
 		log.Printf("handlePageRegister template error: %v", err)

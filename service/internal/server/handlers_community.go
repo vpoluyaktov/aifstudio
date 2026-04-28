@@ -235,7 +235,12 @@ func (s *Server) handleCommunityPlay(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePageCommunity(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.Community.Execute(w, nil); err != nil {
+	data := pageData{
+		Version:     s.cfg.Version,
+		Environment: s.cfg.Environment,
+		CacheBuster: s.cacheBuster,
+	}
+	if err := s.tmpl.Community.Execute(w, data); err != nil {
 		slog.Error("handlePageCommunity template", "err", err)
 	}
 }

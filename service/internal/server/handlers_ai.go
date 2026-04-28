@@ -507,6 +507,7 @@ func (s *Server) handlePageAIWorkspace(w http.ResponseWriter, r *http.Request) {
 	data := pageData{
 		Version:     s.cfg.Version,
 		Environment: s.cfg.Environment,
+		CacheBuster: s.cacheBuster,
 	}
 	if err := s.tmpl.AIWorkspace.Execute(w, data); err != nil {
 		slog.Error("handlePageAIWorkspace template", "err", err)

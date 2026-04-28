@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?rnd={{.CacheBuster}}">
   <!--
     scAuth bootstrap: creates window.scAuth synchronously so apiFetch() can
     await scAuth.ready before the Firebase module script has run.
@@ -27,7 +27,7 @@
     window.scAuth._resolveReady = _r;
   }());
   </script>
-  <script type="module" src="/static/auth.js"></script>
+  <script type="module" src="/static/auth.js?rnd={{.CacheBuster}}"></script>
   {{block "head" .}}{{end}}
 </head>
 <body class="{{block "bodyclass" .}}{{end}}">
@@ -95,7 +95,7 @@
 
 </div><!-- .crt-outer-frame -->
 
-<script src="/static/app.js"></script>
+<script src="/static/app.js?rnd={{.CacheBuster}}"></script>
 {{block "scripts" .}}{{end}}
 
 <script>

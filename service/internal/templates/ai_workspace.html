@@ -858,5 +858,5 @@ body.workspace-page > .footer { display: none; }
 {{end}}
 
 {{define "scripts"}}
-<script type="module" src="/static/ai_workspace.js?v={{.Version}}"></script>
+<script type="module" src="/static/ai_workspace.js?rnd={{.CacheBuster}}"></script>
 {{end}}

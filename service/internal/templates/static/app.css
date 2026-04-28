@@ -533,10 +533,10 @@ input::placeholder, textarea::placeholder { color: rgba(120,255,175,0.3); }
   .nav-signout { display: none; }
   .nav-user-icon-btn { display: flex; align-items: center; justify-content: center; }
   .main { padding: 1.25rem 1rem; }
-  .nav-brand { font-size: 13.77px; }
+  .nav-brand { font-size: 12px; }
   .nav-mobile-dropdown a { font-size: 13.50px; }
-  .btn { font-size: 10.88px; }
-  .btn-sm { font-size: 9.60px; }
+  .btn { font-size: 9px; }
+  .btn-sm { font-size: 8px; }
   .btn-play { font-size: 15.20px; }
-  .empty-state { font-size: 11.90px; }
+  .empty-state { font-size: 8px; }
 }
